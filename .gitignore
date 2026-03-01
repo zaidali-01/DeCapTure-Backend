@@ -5,7 +5,7 @@ __pycache__/
 *.db
 
 venv/
-.env/
+.env
 
 .vscode/
 .idea/
