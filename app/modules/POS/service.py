@@ -1,11 +1,12 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete, select, join
+from sqlalchemy import select, update, delete
 from fastapi import HTTPException
 from datetime import date
 
 from app.models.inventory import ProductInventory
 from app.models.sales import Sales, SalesInventoryBridge
 from app.models.accounts import DailyAccounts
+
 
 async def create_product(db: AsyncSession, business_id: int, data):
     product = ProductInventory(
@@ -28,7 +29,7 @@ async def get_products(db: AsyncSession, business_id: int):
     return result.scalars().all()
 
 
-async def update_product(db: AsyncSession, product_id: int, business_id: int, data):
+async def get_product_by_id(db: AsyncSession, product_id: int, business_id: int):
     result = await db.execute(
         select(ProductInventory).where(
             ProductInventory.id == product_id,
@@ -38,6 +39,11 @@ async def update_product(db: AsyncSession, product_id: int, business_id: int, da
     product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+    return product
+
+
+async def update_product(db: AsyncSession, product_id: int, business_id: int, data):
+    product = await get_product_by_id(db, product_id, business_id)
 
     await db.execute(
         update(ProductInventory)
@@ -50,20 +56,13 @@ async def update_product(db: AsyncSession, product_id: int, business_id: int, da
         )
     )
     await db.commit()
+
     result = await db.execute(select(ProductInventory).where(ProductInventory.id == product_id))
     return result.scalar_one()
 
 
 async def delete_product(db: AsyncSession, product_id: int, business_id: int):
-    result = await db.execute(
-        select(ProductInventory).where(
-            ProductInventory.id == product_id,
-            ProductInventory.business_id == business_id
-        )
-    )
-    product = result.scalar_one_or_none()
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+    product = await get_product_by_id(db, product_id, business_id)
 
     await db.execute(delete(ProductInventory).where(ProductInventory.id == product_id))
     await db.commit()
@@ -81,77 +80,90 @@ async def create_sale(db: AsyncSession, user_id: int, business_id: int, data):
     await db.commit()
     await db.refresh(sale)
 
+    total_amount = 0
+
     for item in data.items:
-        result = await db.execute(
-            select(ProductInventory).where(
-                ProductInventory.id == item.listing_id,
-                ProductInventory.business_id == business_id
-            )
-        )
-        product = result.scalar_one_or_none()
-        if not product:
-            raise HTTPException(status_code=404, detail=f"Product {item.listing_id} not found")
+        product = await get_product_by_id(db, item.listing_id, business_id)
+
         if product.quantity < item.quantity:
-            raise HTTPException(status_code=400, detail=f"Insufficient stock for product {product.name}")
+            raise HTTPException(status_code=400, detail=f"Insufficient stock for {product.name}")
 
         product.quantity -= item.quantity
+        total_amount += float(product.price) * item.quantity
         db.add(product)
 
-        bridge = SalesInventoryBridge(
+        db.add(SalesInventoryBridge(
             sales_id=sale.id,
             listing_id=item.listing_id,
             quantity=item.quantity
-        )
-        db.add(bridge)
+        ))
 
     await db.commit()
 
     today = date.today()
     result = await db.execute(
-        select(DailyAccounts).where(DailyAccounts.business_id == business_id, DailyAccounts.date == today)
+        select(DailyAccounts).where(
+            DailyAccounts.business_id == business_id,
+            DailyAccounts.date == today
+        )
     )
-    daily_account = result.scalar_one_or_none()
-    total_sale_amount = sum(
-        [(await db.get(ProductInventory, item.listing_id)).price * item.quantity for item in data.items]
-    )
+    daily = result.scalar_one_or_none()
 
-    if daily_account:
-        daily_account.revenue += total_sale_amount
-        daily_account.sales += 1
-        db.add(daily_account)
+    if daily:
+        daily.revenue += total_amount
+        daily.sales += 1
+        db.add(daily)
     else:
-        daily_account = DailyAccounts(
+        db.add(DailyAccounts(
             business_id=business_id,
             date=today,
-            revenue=total_sale_amount,
+            revenue=total_amount,
             sales=1,
             cost=0,
             salary_cost=0,
             operational_cost=0,
             miscellaneous=0
-        )
-        db.add(daily_account)
+        ))
 
     await db.commit()
     await db.refresh(sale)
     return sale
 
 
+async def buy_product(db: AsyncSession, user_id: int, business_id: int, product_id: int, quantity: int):
+    product = await get_product_by_id(db, product_id, business_id)
+
+    if product.quantity < quantity:
+        raise HTTPException(status_code=400, detail="Insufficient stock")
+
+    class TempItem:
+        def __init__(self, listing_id, quantity):
+            self.listing_id = listing_id
+            self.quantity = quantity
+
+    class TempSale:
+        def __init__(self):
+            self.payment_method = "cash"
+            self.transaction_id = f"quick-{product_id}"
+            self.items = [TempItem(product_id, quantity)]
+
+    return await create_sale(db, user_id, business_id, TempSale())
+
 
 async def list_sales(db: AsyncSession, business_id: int):
     result = await db.execute(
-        select(Sales).where(
-            Sales.user_id == Sales.user_id  
-        )
+        select(Sales)
+        .join(SalesInventoryBridge, Sales.id == SalesInventoryBridge.sales_id)
+        .join(ProductInventory, ProductInventory.id == SalesInventoryBridge.listing_id)
+        .where(ProductInventory.business_id == business_id)
     )
-    return result.scalars().all()
+    return result.scalars().unique().all()
 
 
 async def get_sale_details(db: AsyncSession, sale_id: int, business_id: int):
-    sale_result = await db.execute(
-        select(Sales).where(Sales.id == sale_id)
-    )
+    sale_result = await db.execute(select(Sales).where(Sales.id == sale_id))
     sale = sale_result.scalar_one_or_none()
+
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
 
