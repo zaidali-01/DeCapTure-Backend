@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Customer Chat | DeCapTure</title>
+<style>
+:root{
+  --bg:#f5f1e8;
+  --paper:#fffdf8;
+  --ink:#1e2930;
+  --muted:#6b7280;
+  --line:#ddd2c4;
+  --brand:#9a3412;
+  --brand-soft:#fff1ea;
+  --brand-dark:#7c2d12;
+  --user:#0f766e;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  min-height:100vh;
+  font-family:Georgia, "Times New Roman", serif;
+  color:var(--ink);
+  background:
+    radial-gradient(circle at 15% 20%, rgba(154,52,18,.14), transparent 30%),
+    radial-gradient(circle at 80% 15%, rgba(15,118,110,.12), transparent 26%),
+    linear-gradient(180deg, #f8f3ea 0%, #eee4d2 100%);
+}
+.shell{
+  max-width:980px;
+  margin:0 auto;
+  padding:24px 16px 34px;
+}
+.hero{
+  background:rgba(255,253,248,.82);
+  backdrop-filter:blur(10px);
+  border:1px solid rgba(221,210,196,.92);
+  border-radius:28px;
+  padding:24px;
+  box-shadow:0 18px 50px rgba(30,41,48,.08);
+}
+.hero h1{
+  margin:0;
+  font-size:clamp(2rem,3.6vw,3.2rem);
+}
+.hero p{
+  margin:10px 0 0;
+  color:var(--muted);
+  line-height:1.7;
+  max-width:720px;
+}
+.layout{
+  display:grid;
+  grid-template-columns:320px minmax(0,1fr);
+  gap:18px;
+  margin-top:18px;
+}
+.panel{
+  background:rgba(255,253,248,.9);
+  border:1px solid rgba(221,210,196,.95);
+  border-radius:24px;
+  padding:20px;
+  box-shadow:0 14px 36px rgba(30,41,48,.07);
+}
+.panel h2{
+  margin:0 0 12px;
+  font-size:24px;
+}
+.panel p{
+  margin:0 0 14px;
+  color:var(--muted);
+  line-height:1.6;
+}
+label{
+  display:block;
+  margin:12px 0 6px;
+  font-size:13px;
+  font-weight:700;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  color:#4b5563;
+}
+input,textarea{
+  width:100%;
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:13px 14px;
+  background:#fffdfa;
+  color:var(--ink);
+  font:inherit;
+}
+textarea{
+  min-height:60px;
+  max-height:160px;
+  resize:vertical;
+}
+input:focus,textarea:focus{
+  outline:none;
+  border-color:var(--brand);
+  box-shadow:0 0 0 4px rgba(154,52,18,.1);
+}
+.btn{
+  appearance:none;
+  border:none;
+  border-radius:999px;
+  padding:12px 18px;
+  background:var(--brand);
+  color:white;
+  font-size:14px;
+  font-weight:700;
+  cursor:pointer;
+  transition:transform .18s ease, background .18s ease, opacity .18s ease;
+}
+.btn:hover{background:var(--brand-dark);transform:translateY(-1px)}
+.btn.secondary{
+  background:transparent;
+  color:var(--brand-dark);
+  border:1px solid var(--line);
+}
+.btn.secondary:hover{background:#f8f3ea}
+.status{
+  min-height:22px;
+  margin-top:12px;
+  color:var(--muted);
+  font-size:14px;
+}
+.status.ok{color:#15803d}
+.status.err{color:#dc2626}
+.status.warn{color:#9a6700}
+.chat-shell{
+  display:flex;
+  flex-direction:column;
+  min-height:720px;
+}
+.chat-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--line);
+}
+.chat-meta strong{display:block;font-size:20px}
+.chat-meta span{color:var(--muted);font-size:14px}
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  border-radius:999px;
+  padding:8px 12px;
+  background:#effaf8;
+  color:var(--user);
+  font-size:13px;
+  font-weight:700;
+}
+.messages{
+  flex:1;
+  overflow:auto;
+  padding:18px 0;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+.message{
+  max-width:85%;
+  padding:14px 16px;
+  border-radius:22px;
+  line-height:1.6;
+  border:1px solid var(--line);
+  background:#fff;
+  animation:rise .22s ease;
+}
+.message.user{
+  align-self:flex-end;
+  background:#edf9f7;
+  border-color:#cfe7e3;
+}
+.message.bot{
+  align-self:flex-start;
+  background:var(--brand-soft);
+  border-color:#f3d1c2;
+}
+.message.system{
+  align-self:center;
+  max-width:100%;
+  background:transparent;
+  border-style:dashed;
+  color:var(--muted);
+  text-align:center;
+}
+.sources{
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid rgba(0,0,0,.08);
+}
+.sources strong{
+  display:block;
+  font-size:12px;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  margin-bottom:8px;
+}
+.source{
+  font-size:13px;
+  background:rgba(255,255,255,.74);
+  border:1px solid rgba(0,0,0,.08);
+  border-radius:14px;
+  padding:10px 12px;
+  margin-top:8px;
+}
+.composer{
+  display:flex;
+  gap:12px;
+  align-items:flex-end;
+  padding-top:14px;
+  border-top:1px solid var(--line);
+}
+.composer textarea{flex:1}
+.typing{
+  display:inline-flex;
+  gap:6px;
+  align-items:center;
+}
+.typing span{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:#c79d87;
+  animation:bounce 1s infinite ease-in-out;
+}
+.typing span:nth-child(2){animation-delay:.15s}
+.typing span:nth-child(3){animation-delay:.3s}
+@keyframes bounce{
+  0%, 80%, 100%{transform:translateY(0)}
+  40%{transform:translateY(-5px)}
+}
+@keyframes rise{
+  from{opacity:0;transform:translateY(6px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@media (max-width: 900px){
+  .layout{grid-template-columns:1fr}
+  .chat-shell{min-height:620px}
+}
+</style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <h1>Ask the business anything that lives in its documents.</h1>
+      <p>Join an existing session with the ID shared by the owner, or create a new session if you know the business ID. The assistant answers from uploaded PDFs and shows the supporting source snippets.</p>
+    </section>
+
+    <div class="layout">
+      <aside class="panel">
+        <h2>Start chat</h2>
+        <p>Use one of the two paths below to begin talking to the chatbot.</p>
+
+        <label for="sessionId">Join existing session</label>
+        <input id="sessionId" type="number" min="1" placeholder="Session ID from owner" />
+
+        <label for="customerName">Your name</label>
+        <input id="customerName" placeholder="Ayesha" />
+
+        <button class="btn" type="button" style="margin-top:14px" onclick="joinSession()">Join session</button>
+
+        <p style="margin:18px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.08em">Or create a new one</p>
+
+        <label for="businessId">Business ID</label>
+        <input id="businessId" type="number" min="1" placeholder="Business ID" />
+        <button class="btn secondary" type="button" style="margin-top:14px" onclick="createSession()">Create new session</button>
+
+        <div id="setupStatus" class="status"></div>
+      </aside>
+
+      <main class="panel chat-shell">
+        <div class="chat-top">
+          <div class="chat-meta">
+            <strong id="chatTitle">Chat not started</strong>
+            <span id="chatSubtitle">Create or join a session to begin.</span>
+          </div>
+          <div class="badge" id="sessionBadge">Waiting</div>
+        </div>
+
+        <div class="messages" id="messages">
+          <div class="message system">Your conversation will appear here.</div>
+        </div>
+
+        <div class="composer">
+          <textarea id="messageBox" placeholder="Ask about products, timings, policies, services, or any PDF-backed detail." onkeydown="handleComposerKey(event)"></textarea>
+          <button class="btn" type="button" id="sendButton" onclick="sendMessage()" disabled>Send</button>
+        </div>
+        <div id="chatStatus" class="status"></div>
+      </main>
+    </div>
+  </div>
+
+<script>
+const API = window.location.origin;
+let sessionId = null;
+let customerName = "";
+
+function setStatus(id, message, tone = "") {
+  const el = document.getElementById(id);
+  el.className = `status ${tone}`.trim();
+  el.textContent = message || "";
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(`${API}${path}`, options);
+  const text = await response.text();
+  let data = null;
+
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (error) {
+    data = text;
+  }
+
+  if (!response.ok) {
+    const detail = data && data.detail ? data.detail : `Request failed (${response.status})`;
+    throw new Error(detail);
+  }
+
+  return data;
+}
+
+function addMessage(role, content, sources = []) {
+  const messages = document.getElementById("messages");
+  if (messages.children.length === 1 && messages.firstElementChild.classList.contains("system")) {
+    messages.innerHTML = "";
+  }
+
+  const article = document.createElement("article");
+  article.className = `message ${role}`;
+
+  let body = `<div>${escapeHtml(content).replace(/\n/g, "<br />")}</div>`;
+  if (role === "bot" && sources.length) {
+    body += `
+      <div class="sources">
+        <strong>Sources</strong>
+        ${sources.map((snippet) => `<div class="source">${escapeHtml(snippet)}</div>`).join("")}
+      </div>
+    `;
+  }
+
+  article.innerHTML = body;
+  messages.appendChild(article);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function setChatHeader() {
+  document.getElementById("chatTitle").textContent = `Session ${sessionId}`;
+  document.getElementById("chatSubtitle").textContent = customerName ? `Chatting as ${customerName}` : "Chat session active";
+  document.getElementById("sessionBadge").textContent = `Live #${sessionId}`;
+  document.getElementById("sendButton").disabled = false;
+}
+
+async function createSession() {
+  const businessId = Number(document.getElementById("businessId").value);
+  customerName = document.getElementById("customerName").value.trim() || "Guest";
+
+  if (!businessId) {
+    setStatus("setupStatus", "Enter a business ID first.", "err");
+    return;
+  }
+
+  setStatus("setupStatus", "Creating session...", "warn");
+  try {
+    const session = await api("/communications/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        business_id: businessId,
+        customer_name: customerName,
+      }),
+    });
+
+    sessionId = session.id;
+    setChatHeader();
+    addMessage("system", `Session ${session.id} is ready. Ask your question whenever you are ready.`);
+    setStatus("setupStatus", `Created session ${session.id}.`, "ok");
+  } catch (error) {
+    setStatus("setupStatus", error.message, "err");
+  }
+}
+
+async function joinSession() {
+  const value = Number(document.getElementById("sessionId").value);
+  customerName = document.getElementById("customerName").value.trim() || "Guest";
+
+  if (!value) {
+    setStatus("setupStatus", "Enter a session ID first.", "err");
+    return;
+  }
+
+  setStatus("setupStatus", "Joining session and loading history...", "warn");
+  try {
+    const history = await api(`/communications/sessions/${value}/history`);
+    sessionId = value;
+    setChatHeader();
+    document.getElementById("messages").innerHTML = "";
+
+    if (!history.length) {
+      addMessage("system", `Session ${sessionId} is active. No previous messages yet.`);
+    } else {
+      history.forEach((item) => {
+        const role = item.role === "assistant" ? "bot" : item.role;
+        addMessage(role, item.content, item.sources || []);
+      });
+    }
+
+    setStatus("setupStatus", `Joined session ${sessionId}.`, "ok");
+  } catch (error) {
+    setStatus("setupStatus", error.message, "err");
+  }
+}
+
+function showTyping() {
+  const messages = document.getElementById("messages");
+  const typing = document.createElement("article");
+  typing.className = "message bot";
+  typing.id = "typingMessage";
+  typing.innerHTML = `<div class="typing"><span></span><span></span><span></span></div>`;
+  messages.appendChild(typing);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function hideTyping() {
+  const typing = document.getElementById("typingMessage");
+  if (typing) {
+    typing.remove();
+  }
+}
+
+async function sendMessage() {
+  const box = document.getElementById("messageBox");
+  const content = box.value.trim();
+
+  if (!sessionId) {
+    setStatus("chatStatus", "Create or join a session first.", "err");
+    return;
+  }
+
+  if (!content) {
+    return;
+  }
+
+  addMessage("user", content);
+  box.value = "";
+  setStatus("chatStatus", "Waiting for assistant reply...", "warn");
+  document.getElementById("sendButton").disabled = true;
+  showTyping();
+
+  try {
+    const reply = await api("/communications/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: sessionId,
+        content,
+      }),
+    });
+
+    hideTyping();
+    addMessage("bot", reply.answer, reply.sources || []);
+    setStatus("chatStatus", "Reply received.", "ok");
+  } catch (error) {
+    hideTyping();
+    addMessage("system", `Error: ${error.message}`);
+    setStatus("chatStatus", error.message, "err");
+  } finally {
+    document.getElementById("sendButton").disabled = false;
+    box.focus();
+  }
+}
+
+function handleComposerKey(event) {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
+  }
+}
+</script>
+</body>
+</html>

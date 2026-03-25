@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Owner Workspace | DeCapTure</title>
+<style>
+:root{
+  --bg:#f3efe4;
+  --panel:#fffdf8;
+  --ink:#1f2a2e;
+  --muted:#6f7b7e;
+  --line:#dfd7c7;
+  --brand:#0f766e;
+  --brand-dark:#115e59;
+  --accent:#f59e0b;
+  --danger:#dc2626;
+  --ok:#15803d;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Georgia, "Times New Roman", serif;
+  color:var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(245,158,11,.18), transparent 32%),
+    linear-gradient(135deg, #f6f0e2 0%, #efe6d2 52%, #e8dcc4 100%);
+  min-height:100vh;
+}
+.shell{max-width:1180px;margin:0 auto;padding:28px 18px 40px}
+.hero{
+  background:rgba(255,253,248,.82);
+  backdrop-filter:blur(10px);
+  border:1px solid rgba(223,215,199,.9);
+  border-radius:28px;
+  padding:28px;
+  box-shadow:0 18px 50px rgba(31,42,46,.08);
+  margin-bottom:22px;
+}
+.eyebrow{
+  display:inline-block;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  font-size:12px;
+  color:var(--brand);
+  margin-bottom:10px;
+}
+.hero h1{
+  margin:0;
+  font-size:clamp(2rem,4vw,3.5rem);
+  line-height:1;
+}
+.hero p{
+  max-width:700px;
+  color:var(--muted);
+  font-size:16px;
+  line-height:1.7;
+  margin:14px 0 0;
+}
+.hero-links{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  margin-top:22px;
+}
+.hero-links a,.hero-links button,.btn{
+  appearance:none;
+  border:none;
+  border-radius:999px;
+  padding:12px 18px;
+  background:var(--brand);
+  color:white;
+  text-decoration:none;
+  cursor:pointer;
+  font-size:14px;
+  font-weight:700;
+  transition:transform .18s ease, background .18s ease, opacity .18s ease;
+}
+.hero-links a:hover,.hero-links button:hover,.btn:hover{background:var(--brand-dark);transform:translateY(-1px)}
+.btn.secondary{background:transparent;color:var(--brand-dark);border:1px solid var(--line)}
+.btn.secondary:hover{background:#f6f4ed}
+.btn.danger{background:var(--danger)}
+.grid{
+  display:grid;
+  grid-template-columns:340px minmax(0,1fr);
+  gap:18px;
+}
+.panel{
+  background:rgba(255,253,248,.9);
+  border:1px solid rgba(223,215,199,.95);
+  border-radius:24px;
+  padding:20px;
+  box-shadow:0 14px 36px rgba(31,42,46,.07);
+}
+.panel h2{
+  margin:0 0 14px;
+  font-size:24px;
+}
+.panel p.lead{
+  margin:-4px 0 18px;
+  color:var(--muted);
+  line-height:1.6;
+}
+label{
+  display:block;
+  margin:14px 0 6px;
+  font-size:13px;
+  font-weight:700;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  color:#4d5a5d;
+}
+input,textarea,select{
+  width:100%;
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:13px 14px;
+  background:#fffdfa;
+  font:inherit;
+  color:var(--ink);
+}
+textarea{min-height:96px;resize:vertical}
+input:focus,textarea:focus,select:focus{
+  outline:none;
+  border-color:var(--brand);
+  box-shadow:0 0 0 4px rgba(15,118,110,.12);
+}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stack{display:flex;flex-direction:column;gap:14px}
+.status{
+  min-height:20px;
+  margin-top:12px;
+  font-size:14px;
+  color:var(--muted);
+}
+.status.ok{color:var(--ok)}
+.status.err{color:var(--danger)}
+.status.warn{color:#9a6700}
+.business-list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  max-height:520px;
+  overflow:auto;
+}
+.business-card{
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:14px;
+  background:#fffdfa;
+  cursor:pointer;
+  transition:border-color .18s ease, transform .18s ease, background .18s ease;
+}
+.business-card:hover{transform:translateY(-1px);border-color:#c5b9a3}
+.business-card.active{
+  border-color:var(--brand);
+  background:#f1fbf9;
+  box-shadow:0 0 0 4px rgba(15,118,110,.08);
+}
+.business-card h3{
+  margin:0;
+  font-size:18px;
+}
+.meta{
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.6;
+  margin-top:6px;
+}
+.detail-grid{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0,1fr));
+  gap:18px;
+}
+.subpanel{
+  border:1px solid var(--line);
+  border-radius:20px;
+  padding:18px;
+  background:#fffdfa;
+}
+.subpanel h3{
+  margin:0 0 8px;
+  font-size:20px;
+}
+.subpanel p{
+  margin:0 0 14px;
+  color:var(--muted);
+  line-height:1.6;
+}
+.pill{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  border-radius:999px;
+  padding:8px 12px;
+  background:#f4efe4;
+  color:#5a6467;
+  font-size:13px;
+}
+.docs{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-top:14px;
+}
+.doc{
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:12px 14px;
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  background:#fff;
+}
+.doc strong{display:block;margin-bottom:4px}
+.session-box{
+  margin-top:14px;
+  border-radius:18px;
+  padding:16px;
+  background:linear-gradient(135deg, rgba(15,118,110,.12), rgba(245,158,11,.14));
+  border:1px solid rgba(15,118,110,.14);
+}
+.session-box code{
+  display:block;
+  margin-top:8px;
+  font-size:40px;
+  font-weight:700;
+  color:var(--brand-dark);
+}
+.empty{
+  border:1px dashed var(--line);
+  border-radius:18px;
+  padding:20px;
+  text-align:center;
+  color:var(--muted);
+  background:rgba(255,255,255,.5);
+}
+@media (max-width: 920px){
+  .grid{grid-template-columns:1fr}
+  .detail-grid{grid-template-columns:1fr}
+  .row{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <span class="eyebrow">DeCapTure owner workspace</span>
+      <h1>Build the knowledge base your customers will chat with.</h1>
+      <p>Create a business, upload one or more PDFs, then generate a session ID for a customer. You can also inspect backend health and registered APIs from here.</p>
+      <div class="hero-links">
+        <a href="/customer" target="_blank" rel="noreferrer">Open customer page</a>
+        <button type="button" onclick="checkHealth()">Check backend health</button>
+        <button type="button" class="secondary btn" onclick="showRoutes()">Show API routes</button>
+      </div>
+      <div id="healthStatus" class="status"></div>
+    </section>
+
+    <div class="grid">
+      <aside class="panel">
+        <h2>Businesses</h2>
+        <p class="lead">Choose a business to manage, or create a new one for testing.</p>
+
+        <div class="stack">
+          <button class="btn secondary" type="button" onclick="loadBusinesses()">Refresh business list</button>
+          <div id="businessList" class="business-list"></div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--line);margin:18px 0" />
+
+        <h2 style="font-size:20px">Create business</h2>
+        <label for="businessName">Name</label>
+        <input id="businessName" placeholder="Acme Dental Clinic" />
+        <label for="businessIndustry">Industry</label>
+        <input id="businessIndustry" placeholder="Healthcare" />
+        <label for="businessEmail">Email</label>
+        <input id="businessEmail" placeholder="owner@acme.com" />
+        <label for="businessPhone">Phone</label>
+        <input id="businessPhone" placeholder="+92 300 0000000" />
+        <label for="businessDescription">Description</label>
+        <textarea id="businessDescription" placeholder="Short description of the business and what the chatbot should help customers with."></textarea>
+        <button class="btn" type="button" style="margin-top:14px" onclick="createBusiness()">Create business</button>
+        <div id="businessStatus" class="status"></div>
+      </aside>
+
+      <main class="panel">
+        <h2>Selected business</h2>
+        <p class="lead">Upload documents, create customer sessions, and verify what the backend is exposing.</p>
+
+        <div id="selectedEmpty" class="empty">Select a business from the left to unlock document upload and customer session tools.</div>
+
+        <div id="selectedPanel" style="display:none">
+          <div class="pill" id="selectedMeta">No business selected</div>
+
+          <div class="detail-grid" style="margin-top:18px">
+            <section class="subpanel">
+              <h3>Upload PDF</h3>
+              <p>Pick a PDF manual, brochure, FAQ, or catalog. The backend will extract text, chunk it, embed it, and save it for retrieval.</p>
+              <label for="pdfInput">PDF file</label>
+              <input id="pdfInput" type="file" accept=".pdf" />
+              <button class="btn" type="button" style="margin-top:14px" onclick="uploadDocument()">Upload and ingest</button>
+              <div id="uploadStatus" class="status"></div>
+            </section>
+
+            <section class="subpanel">
+              <h3>Create customer session</h3>
+              <p>Generate a session ID you can share with a customer so they can use the chat page immediately.</p>
+              <label for="customerName">Customer name</label>
+              <input id="customerName" placeholder="Walk-in customer" />
+              <button class="btn" type="button" style="margin-top:14px" onclick="createSession()">Create session</button>
+              <div id="sessionStatus" class="status"></div>
+              <div id="sessionResult"></div>
+            </section>
+          </div>
+
+          <section class="subpanel" style="margin-top:18px">
+            <h3>Uploaded documents</h3>
+            <p>Use this to confirm your PDFs were ingested and remove old files if needed.</p>
+            <button class="btn secondary" type="button" onclick="loadDocuments()">Refresh documents</button>
+            <div id="documentsStatus" class="status"></div>
+            <div id="documentsList" class="docs"></div>
+          </section>
+
+          <section class="subpanel" style="margin-top:18px">
+            <h3>Registered API routes</h3>
+            <p>This is a quick way to check whether your backend routes are actually mounted and available.</p>
+            <pre id="routesBox" style="margin:0;white-space:pre-wrap;font-family:'Courier New', monospace;font-size:13px;color:#3b4a4d;background:#f8f5ee;border:1px solid var(--line);border-radius:16px;padding:14px;max-height:260px;overflow:auto"></pre>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+
+<script>
+const API = window.location.origin;
+let businesses = [];
+let selectedBusinessId = null;
+let currentDocuments = [];
+
+function setStatus(id, message, tone = "") {
+  const el = document.getElementById(id);
+  el.className = `status ${tone}`.trim();
+  el.textContent = message || "";
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(`${API}${path}`, options);
+  const text = await response.text();
+  let data = null;
+
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (error) {
+    data = text;
+  }
+
+  if (!response.ok) {
+    const detail = data && data.detail ? data.detail : `Request failed (${response.status})`;
+    throw new Error(detail);
+  }
+
+  return data;
+}
+
+function renderBusinesses() {
+  const container = document.getElementById("businessList");
+  if (!businesses.length) {
+    container.innerHTML = `<div class="empty">No businesses yet. Create one to start testing the chatbot flow.</div>`;
+    return;
+  }
+
+  container.innerHTML = businesses.map((business) => `
+    <button type="button" class="business-card ${business.id === selectedBusinessId ? "active" : ""}" onclick="selectBusiness(${business.id})">
+      <h3>${escapeHtml(business.name)}</h3>
+      <div class="meta">
+        ID: ${business.id}<br />
+        Industry: ${escapeHtml(business.industry || "Not set")}<br />
+        Email: ${escapeHtml(business.email || "Not set")}
+      </div>
+    </button>
+  `).join("");
+}
+
+function selectBusiness(id) {
+  selectedBusinessId = id;
+  const business = businesses.find((item) => item.id === id);
+  renderBusinesses();
+
+  document.getElementById("selectedEmpty").style.display = business ? "none" : "block";
+  document.getElementById("selectedPanel").style.display = business ? "block" : "none";
+
+  if (!business) {
+    return;
+  }
+
+  document.getElementById("selectedMeta").textContent = `Business #${business.id} | ${business.name}`;
+  document.getElementById("sessionResult").innerHTML = "";
+  document.getElementById("uploadStatus").textContent = "";
+  document.getElementById("documentsStatus").textContent = "";
+  loadDocuments();
+  showRoutes();
+}
+
+async function loadBusinesses() {
+  setStatus("businessStatus", "Loading businesses...", "warn");
+  try {
+    businesses = await api("/businesses");
+    renderBusinesses();
+    setStatus("businessStatus", `Loaded ${businesses.length} business${businesses.length === 1 ? "" : "es"}.`, "ok");
+
+    if (selectedBusinessId && businesses.some((item) => item.id === selectedBusinessId)) {
+      selectBusiness(selectedBusinessId);
+    } else if (businesses.length && selectedBusinessId === null) {
+      selectBusiness(businesses[0].id);
+    }
+  } catch (error) {
+    setStatus("businessStatus", error.message, "err");
+  }
+}
+
+async function createBusiness() {
+  const payload = {
+    name: document.getElementById("businessName").value.trim(),
+    industry: document.getElementById("businessIndustry").value.trim() || null,
+    email: document.getElementById("businessEmail").value.trim() || null,
+    phone: document.getElementById("businessPhone").value.trim() || null,
+    description: document.getElementById("businessDescription").value.trim() || null,
+  };
+
+  if (!payload.name) {
+    setStatus("businessStatus", "Business name is required.", "err");
+    return;
+  }
+
+  setStatus("businessStatus", "Creating business...", "warn");
+  try {
+    const created = await api("/businesses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    document.getElementById("businessName").value = "";
+    document.getElementById("businessIndustry").value = "";
+    document.getElementById("businessEmail").value = "";
+    document.getElementById("businessPhone").value = "";
+    document.getElementById("businessDescription").value = "";
+
+    setStatus("businessStatus", `Created "${created.name}" with ID ${created.id}.`, "ok");
+    await loadBusinesses();
+    selectBusiness(created.id);
+  } catch (error) {
+    setStatus("businessStatus", error.message, "err");
+  }
+}
+
+async function uploadDocument() {
+  if (!selectedBusinessId) {
+    setStatus("uploadStatus", "Select a business first.", "err");
+    return;
+  }
+
+  const fileInput = document.getElementById("pdfInput");
+  const file = fileInput.files[0];
+
+  if (!file) {
+    setStatus("uploadStatus", "Choose a PDF file first.", "err");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  setStatus("uploadStatus", "Uploading and ingesting PDF...", "warn");
+  try {
+    const result = await api(`/communications/documents/${selectedBusinessId}`, {
+      method: "POST",
+      body: formData,
+    });
+
+    setStatus("uploadStatus", `Uploaded "${result.filename}" with ${result.chunk_count} chunks.`, "ok");
+    fileInput.value = "";
+    await loadDocuments();
+  } catch (error) {
+    setStatus("uploadStatus", error.message, "err");
+  }
+}
+
+async function loadDocuments() {
+  if (!selectedBusinessId) {
+    return;
+  }
+
+  const list = document.getElementById("documentsList");
+  list.innerHTML = "";
+  setStatus("documentsStatus", "Loading documents...", "warn");
+
+  try {
+    currentDocuments = await api(`/communications/documents/${selectedBusinessId}`);
+    if (!currentDocuments.length) {
+      list.innerHTML = `<div class="empty">No documents uploaded yet for this business.</div>`;
+    } else {
+      list.innerHTML = currentDocuments.map((doc) => `
+        <div class="doc">
+          <div>
+            <strong>${escapeHtml(doc.filename)}</strong>
+            <div class="meta">Document ID: ${doc.id}<br />Chunks: ${doc.chunk_count}<br />Uploaded: ${escapeHtml(doc.uploaded_at)}</div>
+          </div>
+          <button type="button" class="btn danger" onclick="deleteDocument(${doc.id})">Delete</button>
+        </div>
+      `).join("");
+    }
+    setStatus("documentsStatus", `Loaded ${currentDocuments.length} document${currentDocuments.length === 1 ? "" : "s"}.`, "ok");
+  } catch (error) {
+    currentDocuments = [];
+    list.innerHTML = "";
+    setStatus("documentsStatus", error.message, "err");
+  }
+}
+
+async function deleteDocument(documentId) {
+  if (!selectedBusinessId) {
+    return;
+  }
+
+  const documentRecord = currentDocuments.find((item) => item.id === documentId);
+  const filename = documentRecord ? documentRecord.filename : "this document";
+
+  if (!window.confirm(`Delete "${filename}"?`)) {
+    return;
+  }
+
+  setStatus("documentsStatus", `Deleting "${filename}"...`, "warn");
+  try {
+    await api(`/communications/documents/${selectedBusinessId}/${documentId}`, {
+      method: "DELETE",
+    });
+    setStatus("documentsStatus", `Deleted "${filename}".`, "ok");
+    await loadDocuments();
+  } catch (error) {
+    setStatus("documentsStatus", error.message, "err");
+  }
+}
+
+async function createSession() {
+  if (!selectedBusinessId) {
+    setStatus("sessionStatus", "Select a business first.", "err");
+    return;
+  }
+
+  const customerName = document.getElementById("customerName").value.trim() || "Guest";
+  setStatus("sessionStatus", "Creating session...", "warn");
+
+  try {
+    const session = await api("/communications/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        business_id: selectedBusinessId,
+        customer_name: customerName,
+      }),
+    });
+
+    document.getElementById("sessionResult").innerHTML = `
+      <div class="session-box">
+        Session created for ${escapeHtml(customerName)}.
+        <code>${session.id}</code>
+        Share this ID with the customer and have them open <a href="/customer" target="_blank" rel="noreferrer">the customer chat page</a>.
+      </div>
+    `;
+    setStatus("sessionStatus", "Session ready.", "ok");
+  } catch (error) {
+    setStatus("sessionStatus", error.message, "err");
+  }
+}
+
+async function checkHealth() {
+  setStatus("healthStatus", "Checking backend health...", "warn");
+  try {
+    const health = await api("/health");
+    const tone = health.status === "ok" ? "ok" : "err";
+    setStatus("healthStatus", `Backend status: ${health.status}. Database: ${health.database}.`, tone);
+  } catch (error) {
+    setStatus("healthStatus", error.message, "err");
+  }
+}
+
+async function showRoutes() {
+  const box = document.getElementById("routesBox");
+  box.textContent = "Loading routes...";
+  try {
+    const payload = await api("/health/routes");
+    box.textContent = payload.routes
+      .map((route) => `${route.methods.join(", ").padEnd(10)} ${route.path}`)
+      .join("\n");
+  } catch (error) {
+    box.textContent = `Could not load routes: ${error.message}`;
+  }
+}
+
+loadBusinesses();
+checkHealth();
+</script>
+</body>
+</html>
