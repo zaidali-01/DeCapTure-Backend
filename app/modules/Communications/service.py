@@ -1,141 +1,218 @@
 import os
-import pypdf
+import uuid
 
-from groq import Groq
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
-from app.models.chatbot import BusinessDocument, ChatSession, ChatMessage
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _extract_pdf_text(file_path: str, max_chars: int = 12_000) -> str:
-    """Pull plain text from a PDF file, capped to stay inside context limits."""
-    reader = pypdf.PdfReader(file_path)
-    pages: list[str] = []
-    total = 0
-    for page in reader.pages:
-        text = page.extract_text() or ""
-        pages.append(text)
-        total += len(text)
-        if total >= max_chars:
-            break
-    return "\n".join(pages)[:max_chars]
-
-
-def _build_history(messages: list[ChatMessage]) -> list[dict]:
-    """Convert ORM rows to the list[{role, content}] Groq expects."""
-    return [{"role": m.role, "content": m.content} for m in messages]
-
-
-# ── Groq client (initialised once) ───────────────────────────────────────────
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-client = Groq(api_key=settings.GROQ_API_KEY)
-# ── Service functions ─────────────────────────────────────────────────────────
+from app.models.business import Business
+from app.models.communications import (
+    BusinessDocument,
+    CommunicationMessage,
+    CommunicationSession,
+)
+from app.modules.Communications.rag.chroma_client import (
+    delete_document_chunks,
+    get_collection,
+)
+from app.modules.Communications.rag.chunker import chunk_text
+from app.modules.Communications.rag.embedder import embed_batch
+from app.modules.Communications.rag.extractor import extract_text_from_pdf
+from app.modules.Communications.rag.retriever import retrieve_relevant_chunks
+
+
+def get_groq_client():
+    if not settings.GROQ_API_KEY:
+        return None
+
+    try:
+        from groq import Groq
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "groq is required for chatbot responses. "
+            "Install project dependencies with `pip install -r requirements.txt`."
+        ) from exc
+
+    return Groq(api_key=settings.GROQ_API_KEY)
+
+
+async def ensure_business_exists(db: AsyncSession, business_id: int) -> Business:
+    result = await db.execute(select(Business).where(Business.id == business_id))
+    business = result.scalar_one_or_none()
+    if not business:
+        raise ValueError("Business not found")
+    return business
+
+
+async def ingest_document(
+    db: AsyncSession,
+    business_id: int,
+    filename: str,
+    file_path: str,
+) -> BusinessDocument:
+    doc = BusinessDocument(
+        business_id=business_id,
+        filename=filename,
+        file_path=file_path,
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+
+    raw_text = extract_text_from_pdf(file_path)
+
+    chunks = chunk_text(raw_text, chunk_size=500, overlap=50)
+    if not chunks:
+        return doc
+
+    embeddings = embed_batch(chunks)
+
+    collection = get_collection(business_id)
+    collection.add(
+        ids=[str(uuid.uuid4()) for _ in chunks],
+        documents=chunks,
+        embeddings=embeddings,
+        metadatas=[
+            {"document_id": doc.id, "business_id": business_id, "chunk_index": i}
+            for i in range(len(chunks))
+        ],
+    )
+
+    doc.chunk_count = len(chunks)
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+    return doc
+
+
+async def list_documents(db: AsyncSession, business_id: int):
+    result = await db.execute(
+        select(BusinessDocument).where(BusinessDocument.business_id == business_id)
+    )
+    return result.scalars().all()
+
+
+async def delete_document(db: AsyncSession, document_id: int, business_id: int):
+    result = await db.execute(
+        select(BusinessDocument).where(
+            BusinessDocument.id == document_id,
+            BusinessDocument.business_id == business_id,
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise ValueError("Document not found")
+
+    delete_document_chunks(business_id, document_id)
+
+    if os.path.exists(doc.file_path):
+        os.remove(doc.file_path)
+
+    await db.delete(doc)
+    await db.commit()
+    return {"message": f"'{doc.filename}' deleted"}
+
 
 async def create_session(
     db: AsyncSession,
     business_id: int,
     customer_name: str | None,
-) -> ChatSession:
-    session = ChatSession(business_id=business_id, customer_name=customer_name)
+) -> CommunicationSession:
+    await ensure_business_exists(db, business_id)
+
+    session = CommunicationSession(
+        business_id=business_id,
+        customer_name=customer_name,
+    )
     db.add(session)
     await db.commit()
     await db.refresh(session)
     return session
 
 
-async def save_user_message(
+async def get_session_history(db: AsyncSession, session_id: int):
+    result = await db.execute(
+        select(CommunicationMessage)
+        .where(CommunicationMessage.session_id == session_id)
+        .order_by(CommunicationMessage.id)
+    )
+    return result.scalars().all()
+
+
+async def ask(
     db: AsyncSession,
     session_id: int,
-    content: str,
-) -> ChatMessage:
-    msg = ChatMessage(session_id=session_id, role="user", content=content)
-    db.add(msg)
-    await db.commit()
-    await db.refresh(msg)
-    return msg
-
-
-async def generate_reply(
-    db: AsyncSession,
-    message_id: int,
-) -> ChatMessage:
-    """
-    1. Load the user message + its session.
-    2. Pull all PDF documents for that business.
-    3. Ask Groq (Llama 3) with PDF context + conversation history.
-    4. Persist and return the assistant message.
-    """
-
-    # ── 1. Fetch the user message ─────────────────────────────────────────────
-    user_msg: ChatMessage | None = await db.get(ChatMessage, message_id)
-    if user_msg is None:
-        raise ValueError(f"Message {message_id} not found")
-    if user_msg.role != "user":
-        raise ValueError("message_id must point to a user message")
-
-    chat_session: ChatSession | None = await db.get(ChatSession, user_msg.session_id)
-    if chat_session is None:
+    question: str,
+) -> CommunicationMessage:
+    session: CommunicationSession | None = await db.get(CommunicationSession, session_id)
+    if not session:
         raise ValueError("Session not found")
+    groq_client = get_groq_client()
+    if groq_client is None:
+        raise ValueError("GROQ_API_KEY is not configured")
 
-    # ── 2. Fetch PDF context for this business ────────────────────────────────
-    result = await db.execute(
-        select(BusinessDocument).where(
-            BusinessDocument.business_id == chat_session.business_id
-        )
+    user_msg = CommunicationMessage(
+        session_id=session_id,
+        role="user",
+        content=question,
     )
-    docs: list[BusinessDocument] = result.scalars().all()
+    db.add(user_msg)
+    await db.commit()
 
-    pdf_context = ""
-    for doc in docs:
-        if os.path.exists(doc.file_path):
-            pdf_context += f"\n\n--- Document: {doc.filename} ---\n"
-            pdf_context += _extract_pdf_text(doc.file_path)
+    scored_chunks = retrieve_relevant_chunks(
+        business_id=session.business_id,
+        question=question,
+        top_k=5,
+    )
 
-    # ── 3. Fetch conversation history (excluding current message) ─────────────
+    if scored_chunks:
+        context = "\n\n".join(
+            f"[Source {i + 1}]\n{text}"
+            for i, (text, _) in enumerate(scored_chunks)
+        )
+        source_snippets = [text[:200] + "..." for text, _ in scored_chunks]
+    else:
+        context = "No relevant documents found for this business."
+        source_snippets = []
+
     history_result = await db.execute(
-        select(ChatMessage)
+        select(CommunicationMessage)
         .where(
-            ChatMessage.session_id == user_msg.session_id,
-            ChatMessage.id < message_id,
+            CommunicationMessage.session_id == session_id,
+            CommunicationMessage.id != user_msg.id,
         )
-        .order_by(ChatMessage.id)
+        .order_by(CommunicationMessage.id)
+        .limit(10)
     )
-    history: list[ChatMessage] = history_result.scalars().all()
+    history = history_result.scalars().all()
 
-    # ── 4. Build messages list for Groq ───────────────────────────────────────
     system_prompt = (
-        "You are a helpful customer support assistant for a business. "
-        "Answer the customer's questions using ONLY the information found in the "
-        "business documents provided below. "
-        "If the answer is not in the documents, say you don't have that information "
+        "You are a helpful customer support assistant. "
+        "Answer ONLY using the context below. "
+        "If the answer is not in the context, say you don't have that information "
         "and suggest the customer contact the business directly.\n\n"
-        "=== BUSINESS DOCUMENTS ===\n"
-        + (pdf_context if pdf_context else "No documents available.")
+        "=== CONTEXT FROM BUSINESS DOCUMENTS ===\n"
+        f"{context}"
     )
 
     messages = [{"role": "system", "content": system_prompt}]
-    messages += _build_history(history)
-    messages.append({"role": "user", "content": user_msg.content})
+    for msg in history:
+        messages.append({"role": msg.role, "content": msg.content})
+    messages.append({"role": "user", "content": question})
 
-    # ── 5. Call Groq API ──────────────────────────────────────────────────────
-    response = client.chat.completions.create(
-        model="llama3-8b-8192",
+    response = groq_client.chat.completions.create(
+        model=settings.GROQ_MODEL,
         messages=messages,
         max_tokens=1024,
-        temperature=0.7,
+        temperature=0.3,
     )
+    answer_text = response.choices[0].message.content
 
-    reply_text: str = response.choices[0].message.content
-
-    # ── 6. Persist and return the assistant message ───────────────────────────
-    assistant_msg = ChatMessage(
-        session_id=user_msg.session_id,
+    assistant_msg = CommunicationMessage(
+        session_id=session_id,
         role="assistant",
-        content=reply_text,
+        content=answer_text,
+        sources=source_snippets,
     )
     db.add(assistant_msg)
     await db.commit()

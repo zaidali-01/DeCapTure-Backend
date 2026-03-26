@@ -12,3 +12,10 @@ venv/
 .idea/
 
 .DS_Store
+
+# Vector database — do not commit
+chroma_db/
+ 
+# Uploaded PDFs — do not commit
+uploads/
+
