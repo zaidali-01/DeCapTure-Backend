@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional
 
 class BusinessCreate(BaseModel):
     name: str
@@ -6,6 +7,14 @@ class BusinessCreate(BaseModel):
     description: str | None = None
     phone: str | None = None
     email: str | None = None
+
+
+class BusinessUpdate(BaseModel):
+    name: Optional[str] = None
+    industry: Optional[str] = None
+    description: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
 
 
 class BusinessResponse(BaseModel):

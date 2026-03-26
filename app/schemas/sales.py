@@ -1,20 +1,20 @@
 from pydantic import BaseModel
-from datetime import datetime
+from typing import List
 
-class SalesCreate(BaseModel):
-    user_id: int
+class SaleItem(BaseModel):
+    listing_id: int
+    quantity: int
+
+class SaleCreate(BaseModel):
     payment_method: str
-    salesman_id: int | None = None
-    transaction_id: str | None = None
+    transaction_id: str
+    items: List[SaleItem]
 
-
-class SalesResponse(BaseModel):
+class SaleResponse(BaseModel):
     id: int
     user_id: int
     payment_method: str
-    salesman_id: int | None
-    transaction_id: str | None
-    created_at: datetime | None
+    transaction_id: str
 
     class Config:
         from_attributes = True
