@@ -22,6 +22,7 @@ class UserRole(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"), nullable=True)
     role = Column(String(50), nullable=False)
-    rules = Column(JSON)  # rules{}
+    rules = Column(JSON)
     salary = Column(Integer)
