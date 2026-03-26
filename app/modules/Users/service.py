@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 
 from app.models.user import User
+from app.models.module import UserRole
 from app.schemas.user import UserCreate, UserUpdate
 from app.core.security import hash_password, verify_password, decode_access_token
 from app.core.database import get_db
@@ -15,7 +16,7 @@ async def create_user(db: AsyncSession, user: UserCreate):
     result = await db.execute(select(User).where(User.email == user.email))
     existing_user = result.scalar_one_or_none()
     if existing_user:
-        raise ValueError("Email already registered")
+        raise HTTPException(status_code=400, detail="Email already registered")
 
     new_user = User(
         name=user.name,
@@ -25,6 +26,14 @@ async def create_user(db: AsyncSession, user: UserCreate):
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
+
+    db.add(UserRole(
+        user_id=new_user.id,
+        role="customer",
+        business_id=None
+    ))
+    await db.commit()
+
     return new_user
 
 
@@ -40,9 +49,23 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     payload = decode_access_token(token)
     if payload is None:
         raise HTTPException(status_code=401, detail="Invalid token")
+
     user_id = payload.get("user_id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return user
+
+
+async def get_users(db: AsyncSession):
+    result = await db.execute(select(User))
+    return result.scalars().all()
+
+
+async def get_user(db: AsyncSession, user_id: int):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -51,10 +74,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
 
 
 async def update_user(db: AsyncSession, user_id: int, data: UserUpdate):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = await get_user(db, user_id)
 
     await db.execute(
         update(User)
@@ -66,16 +86,28 @@ async def update_user(db: AsyncSession, user_id: int, data: UserUpdate):
         )
     )
     await db.commit()
-    result = await db.execute(select(User).where(User.id == user_id))
-    return result.scalar_one()
+
+    return await get_user(db, user_id)
 
 
 async def delete_user(db: AsyncSession, user_id: int):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = await get_user(db, user_id)
 
     await db.execute(delete(User).where(User.id == user_id))
     await db.commit()
     return {"message": "User deleted successfully"}
+
+
+async def has_role(db, user_id: int, business_id: int, roles: list):
+    from app.models.module import UserRole
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(UserRole).where(
+            UserRole.user_id == user_id,
+            UserRole.business_id == business_id
+        )
+    )
+    user_roles = result.scalars().all()
+
+    return any(r.role in roles for r in user_roles)
