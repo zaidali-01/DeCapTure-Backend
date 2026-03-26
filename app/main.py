@@ -6,14 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy import text
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
 from app.api import api_router
-from app.core.database import engine, Base
-from app.models import *
-from app.api import register_routes
-from app.models import *
+from app.core.database import Base, engine
+from app.models import *  # noqa: F401,F403
 
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -45,24 +40,12 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="DeCapTure API", version="1.0.0", lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-register_routes(app)
-
-app = FastAPI(title="Your API", version="1.0.0", lifespan=lifespan)
-
 allowed_origins = [
     "http://localhost:3000",
     "http://localhost:3001",
 ]
+
+app = FastAPI(title="DeCapTure API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
