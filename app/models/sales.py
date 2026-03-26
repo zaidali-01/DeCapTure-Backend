@@ -7,6 +7,7 @@ class Sales(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"))
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
     payment_method = Column(String(50))

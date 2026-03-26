@@ -72,6 +72,7 @@ async def delete_product(db: AsyncSession, product_id: int, business_id: int):
 async def create_sale(db: AsyncSession, user_id: int, business_id: int, data):
     sale = Sales(
         user_id=user_id,
+        business_id=business_id,
         payment_method=data.payment_method,
         transaction_id=data.transaction_id,
         salesman_id=user_id
