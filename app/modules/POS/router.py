@@ -17,7 +17,11 @@ router = APIRouter(prefix="/pos", tags=["POS"])
 
 
 async def resolve_business_id(current_user, db, requested_business_id):
-    businesses = await get_user_businesses(db, current_user.id)
+    businesses_data = await get_user_businesses(db, current_user.id)
+    if isinstance(businesses_data, dict):
+        businesses = businesses_data.get("businesses", [])
+    else:
+        businesses = businesses_data or []
 
     if not businesses:
         raise HTTPException(status_code=400, detail="No business found")

@@ -45,7 +45,8 @@ async def get_user_businesses(db: AsyncSession, user_id: int):
         .join(UserBusinessBridge, Business.id == UserBusinessBridge.business_id)
         .where(UserBusinessBridge.user_id == user_id)
     )
-    return result.scalars().all()
+    businesses = result.scalars().all()
+    return {"businesses": businesses}
 
 
 async def assign_role(

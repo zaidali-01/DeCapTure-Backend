@@ -41,8 +41,9 @@ async def get_customers(
 @router.post("/send")
 async def send_marketing(
     business_id: int,
-    message: str,
+    message: Optional[str] = Query(None, description="Custom message body"),
     channel: str = Query(..., description="email or whatsapp"),
+    use_ai: bool = Query(False, description="Generate copy with the AI assistant"),
     contact_ids: Optional[List[int]] = Query(None, description="Optional list of contact IDs"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -56,7 +57,8 @@ async def send_marketing(
         business_id=business_id,
         message_content=message,
         channel=channel,
-        contact_ids=contact_ids
+        contact_ids=contact_ids,
+        use_ai=use_ai
     )
     return {"results": results}
 
@@ -64,8 +66,9 @@ async def send_marketing(
 async def send_to_single(
     business_id: int,
     contact_id: int,
-    message: str,
+    message: Optional[str] = Query(None, description="Custom message body"),
     channel: str = Query(..., description="email or whatsapp"),
+    use_ai: bool = Query(False, description="Generate copy with the AI assistant"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -78,7 +81,8 @@ async def send_to_single(
         business_id=business_id,
         contact_id=contact_id,
         message_content=message,
-        channel=channel
+        channel=channel,
+        use_ai=use_ai
     )
     return {"result": result}
 

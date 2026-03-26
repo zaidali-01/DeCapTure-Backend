@@ -15,6 +15,7 @@ class CustomerContact(Base):
     __tablename__ = "customer_contact"
 
     contact_id = Column(Integer, primary_key=True)
+    business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(150))
     email = Column(String(120))
     phone = Column(String(20))

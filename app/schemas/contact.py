@@ -26,6 +26,7 @@ class CustomerContactCreate(BaseModel):
 
 class CustomerContactResponse(CustomerContactCreate):
     contact_id: int
+    business_id: int
 
     class Config:
         from_attributes = True
