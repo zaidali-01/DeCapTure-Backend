@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import api_router
 from app.core.database import engine, Base
+from app.models import *          # ensures all models are registered with Base
+from app.api import register_routes
 from app.models import *
 
 
@@ -14,6 +16,14 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     yield
 
+
+app = FastAPI(
+    title="Your API",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+register_routes(app)
 
 app = FastAPI(title="Your API", version="1.0.0", lifespan=lifespan)
 
