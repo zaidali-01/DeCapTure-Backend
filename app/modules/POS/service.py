@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete, select, join
+from sqlalchemy import select, update, delete
 from fastapi import HTTPException
 from datetime import date
 
@@ -73,6 +73,7 @@ async def delete_product(db: AsyncSession, product_id: int, business_id: int):
 async def create_sale(db: AsyncSession, user_id: int, business_id: int, data):
     sale = Sales(
         user_id=user_id,
+        business_id=business_id,
         payment_method=data.payment_method,
         transaction_id=data.transaction_id,
         salesman_id=user_id
@@ -140,9 +141,7 @@ async def create_sale(db: AsyncSession, user_id: int, business_id: int, data):
 
 async def list_sales(db: AsyncSession, business_id: int):
     result = await db.execute(
-        select(Sales).where(
-            Sales.user_id == Sales.user_id  
-        )
+        select(Sales).where(Sales.business_id == business_id)
     )
     return result.scalars().all()
 
