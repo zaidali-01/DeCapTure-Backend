@@ -51,3 +51,25 @@ class AskResponse(BaseModel):
     session_id: int
     answer: str
     sources: List[str]
+
+
+class EscalationCreate(BaseModel):
+    session_id: int
+
+
+class EscalationResponse(BaseModel):
+    id: int
+    session_id: int
+    business_id: int
+    status: str
+    requested_at: datetime
+    agent_user_id: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
+class HumanMessageSend(BaseModel):
+    session_id: int
+    content: str
+    role: str  # "user" or "agent"

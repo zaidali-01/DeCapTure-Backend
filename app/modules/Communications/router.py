@@ -6,10 +6,15 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.models.user import User
 from app.modules.Communications import service
+from app.modules.Users.service import get_current_user
 from app.schemas.communications import (
     AskResponse,
     DocumentResponse,
+    EscalationCreate,
+    EscalationResponse,
+    HumanMessageSend,
     MessageResponse,
     MessageSend,
     SessionCreate,
@@ -134,3 +139,96 @@ async def get_history(
     db: AsyncSession = Depends(get_db),
 ):
     return await service.get_session_history(db, session_id)
+
+
+@router.post(
+    "/escalate",
+    response_model=EscalationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Customer - Request a human agent",
+)
+async def escalate(
+    payload: EscalationCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await service.request_escalation(db, payload.session_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get(
+    "/escalations/{business_id}",
+    response_model=List[EscalationResponse],
+    summary="Agent - List pending/active escalations for a business",
+)
+async def list_escalations(
+    business_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await service.get_pending_escalations(db, business_id)
+
+
+@router.post(
+    "/escalations/{escalation_id}/claim",
+    response_model=EscalationResponse,
+    summary="Agent - Claim an escalation and join the session",
+)
+async def claim(
+    escalation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await service.claim_escalation(db, escalation_id, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post(
+    "/human-message",
+    response_model=MessageResponse,
+    summary="Send a message from customer or agent during live escalation",
+)
+async def human_message(
+    payload: HumanMessageSend,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        msg = await service.send_human_message(
+            db, payload.session_id, payload.content, payload.role
+        )
+        return msg
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/escalations/{escalation_id}/close",
+    response_model=EscalationResponse,
+    summary="Agent - Close a live escalation session",
+)
+async def close(
+    escalation_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await service.close_escalation(db, escalation_id, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get(
+    "/escalations/session/{session_id}",
+    summary="Customer - Check if an escalation exists for this session",
+)
+async def escalation_status(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    esc = await service.get_escalation_by_session(db, session_id)
+    if not esc:
+        return {"status": "none"}
+    return EscalationResponse.model_validate(esc)

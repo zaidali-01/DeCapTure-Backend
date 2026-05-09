@@ -45,3 +45,24 @@ class CommunicationMessage(Base):
     content = Column(Text, nullable=False)
     sources = Column(JSON, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class EscalationRequest(Base):
+    __tablename__ = "escalation_requests"
+
+    id = Column(Integer, primary_key=True)
+    session_id = Column(
+        Integer,
+        ForeignKey("communication_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    business_id = Column(
+        Integer,
+        ForeignKey("businesses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status = Column(String(20), default="pending")
+    # pending | active | closed
+    requested_at = Column(DateTime, server_default=func.now())
+    agent_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
