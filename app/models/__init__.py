@@ -11,3 +11,10 @@ from .communications import (
     CommunicationMessage,
     EscalationRequest,
 )
+from .employee import Employee, Attendance, LeaveRequest
+from .crm import Lead, CustomerNote, FollowUp
+from .inventory_ext import ProductCategory, Supplier, PurchaseOrder, PurchaseOrderItem
+from .notification import Notification
+from .audit import AuditLog
+from .loyalty import LoyaltyAccount, LoyaltyTransaction
+from .kpi import KPITarget

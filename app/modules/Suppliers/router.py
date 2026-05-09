@@ -6,20 +6,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.user import User
 from app.modules.Business.service import get_user_businesses
-from app.modules.CRM import service
-from app.modules.Users.service import get_current_user
-from app.schemas.crm import (
-    FollowUpCreate,
-    FollowUpResponse,
-    FollowUpUpdate,
-    LeadCreate,
-    LeadResponse,
-    LeadUpdate,
-    NoteCreate,
-    NoteResponse,
+from app.modules.Suppliers import service
+from app.modules.Users.service import get_current_user, has_role
+from app.schemas.inventory_ext import (
+    CategoryCreate,
+    CategoryResponse,
+    PurchaseOrderCreate,
+    PurchaseOrderStatusUpdate,
+    SupplierCreate,
+    SupplierResponse,
+    SupplierUpdate,
 )
 
-router = APIRouter(prefix="/crm", tags=["CRM"])
+router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
 
 
 async def resolve_business(current_user, db, business_id):
@@ -34,120 +33,136 @@ async def resolve_business(current_user, db, business_id):
     return businesses[0].id
 
 
-@router.post("/leads", response_model=LeadResponse)
-async def create_lead(
-    data: LeadCreate,
+@router.post("/categories", response_model=CategoryResponse)
+async def create_category(
+    data: CategoryCreate,
     business_id: Optional[int] = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     business_id = await resolve_business(current_user, db, business_id)
-    return await service.create_lead(db, business_id, current_user.id, data)
+    return await service.create_category(db, business_id, data)
 
 
-@router.get("/leads", response_model=List[LeadResponse])
-async def list_leads(
-    business_id: Optional[int] = Query(None),
-    stage: Optional[str] = Query(None),
-    assigned_to: Optional[int] = Query(None),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    business_id = await resolve_business(current_user, db, business_id)
-    return await service.list_leads(db, business_id, stage, assigned_to)
-
-
-@router.get("/leads/pipeline")
-async def pipeline(
+@router.get("/categories", response_model=List[CategoryResponse])
+async def list_categories(
     business_id: Optional[int] = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     business_id = await resolve_business(current_user, db, business_id)
-    return await service.get_pipeline_summary(db, business_id)
+    return await service.list_categories(db, business_id)
 
 
-@router.put("/leads/{lead_id}", response_model=LeadResponse)
-async def update_lead(
-    lead_id: int,
-    data: LeadUpdate,
+@router.delete("/categories/{category_id}")
+async def delete_category(
+    category_id: int,
     business_id: Optional[int] = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     business_id = await resolve_business(current_user, db, business_id)
-    return await service.update_lead(
+    return await service.delete_category(db, category_id, business_id)
+
+
+@router.post("/", response_model=SupplierResponse)
+async def create_supplier(
+    data: SupplierCreate,
+    business_id: Optional[int] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    business_id = await resolve_business(current_user, db, business_id)
+    return await service.create_supplier(db, business_id, data)
+
+
+@router.get("/", response_model=List[SupplierResponse])
+async def list_suppliers(
+    business_id: Optional[int] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    business_id = await resolve_business(current_user, db, business_id)
+    return await service.list_suppliers(db, business_id)
+
+
+@router.put("/{supplier_id}", response_model=SupplierResponse)
+async def update_supplier(
+    supplier_id: int,
+    data: SupplierUpdate,
+    business_id: Optional[int] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    business_id = await resolve_business(current_user, db, business_id)
+    return await service.update_supplier(db, supplier_id, business_id, data)
+
+
+@router.delete("/{supplier_id}")
+async def delete_supplier(
+    supplier_id: int,
+    business_id: Optional[int] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    business_id = await resolve_business(current_user, db, business_id)
+    return await service.delete_supplier(db, supplier_id, business_id)
+
+
+@router.post("/orders")
+async def create_po(
+    data: PurchaseOrderCreate,
+    business_id: Optional[int] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    business_id = await resolve_business(current_user, db, business_id)
+    if not await has_role(
         db,
-        lead_id,
-        business_id,
-        data,
         current_user.id,
-    )
+        business_id,
+        ["business_owner", "manager"],
+    ):
+        raise HTTPException(status_code=403, detail="Not allowed")
+    return await service.create_purchase_order(db, business_id, current_user.id, data)
 
 
-@router.delete("/leads/{lead_id}")
-async def delete_lead(
-    lead_id: int,
+@router.get("/orders")
+async def list_orders(
+    business_id: Optional[int] = Query(None),
+    status: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    business_id = await resolve_business(current_user, db, business_id)
+    return await service.list_purchase_orders(db, business_id, status)
+
+
+@router.get("/orders/{po_id}")
+async def get_order(
+    po_id: int,
     business_id: Optional[int] = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     business_id = await resolve_business(current_user, db, business_id)
-    return await service.delete_lead(db, lead_id, business_id)
+    return await service.get_purchase_order_detail(db, po_id, business_id)
 
 
-@router.post("/notes", response_model=NoteResponse)
-async def add_note(
-    data: NoteCreate,
+@router.put("/orders/{po_id}/status")
+async def update_order_status(
+    po_id: int,
+    data: PurchaseOrderStatusUpdate,
     business_id: Optional[int] = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     business_id = await resolve_business(current_user, db, business_id)
-    return await service.add_note(db, business_id, current_user.id, data)
-
-
-@router.get("/notes/{contact_id}", response_model=List[NoteResponse])
-async def list_notes(
-    contact_id: int,
-    business_id: Optional[int] = Query(None),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    business_id = await resolve_business(current_user, db, business_id)
-    return await service.list_notes(db, business_id, contact_id)
-
-
-@router.post("/followups", response_model=FollowUpResponse)
-async def create_followup(
-    data: FollowUpCreate,
-    business_id: Optional[int] = Query(None),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    business_id = await resolve_business(current_user, db, business_id)
-    return await service.create_followup(db, business_id, data)
-
-
-@router.get("/followups", response_model=List[FollowUpResponse])
-async def list_followups(
-    business_id: Optional[int] = Query(None),
-    assigned_to: Optional[int] = Query(None),
-    overdue_only: bool = Query(False),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    business_id = await resolve_business(current_user, db, business_id)
-    return await service.list_followups(db, business_id, assigned_to, overdue_only)
-
-
-@router.put("/followups/{followup_id}", response_model=FollowUpResponse)
-async def update_followup(
-    followup_id: int,
-    data: FollowUpUpdate,
-    business_id: Optional[int] = Query(None),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    business_id = await resolve_business(current_user, db, business_id)
-    return await service.update_followup(db, followup_id, business_id, data)
+    if not await has_role(
+        db,
+        current_user.id,
+        business_id,
+        ["business_owner", "manager"],
+    ):
+        raise HTTPException(status_code=403, detail="Not allowed")
+    return await service.update_po_status(db, po_id, business_id, data)

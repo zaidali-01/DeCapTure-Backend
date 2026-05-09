@@ -8,5 +8,10 @@ class ProductInventory(Base):
     name = Column(String(150), nullable=False)
     description = Column(Text)
     business_id = Column(Integer, ForeignKey("businesses.id", ondelete="CASCADE"))
+    category_id = Column(
+        Integer,
+        ForeignKey("product_categories.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     price = Column(Numeric(12,2))
     quantity = Column(Integer, default=0)

@@ -38,6 +38,203 @@ async def apply_startup_schema_fixes() -> None:
             resolved_at TIMESTAMP
         )
         """,
+        # Employees
+        """
+        CREATE TABLE IF NOT EXISTS employees (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            designation VARCHAR(100),
+            department VARCHAR(100),
+            joined_date DATE,
+            salary INTEGER DEFAULT 0,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS attendance (
+            id SERIAL PRIMARY KEY,
+            employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            date DATE NOT NULL,
+            status VARCHAR(20) DEFAULT 'present',
+            check_in TIMESTAMP,
+            check_out TIMESTAMP,
+            notes TEXT
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS leave_requests (
+            id SERIAL PRIMARY KEY,
+            employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            leave_type VARCHAR(50),
+            start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
+            reason TEXT,
+            status VARCHAR(20) DEFAULT 'pending',
+            applied_at TIMESTAMP DEFAULT NOW(),
+            reviewed_at TIMESTAMP
+        )
+        """,
+        # CRM
+        """
+        CREATE TABLE IF NOT EXISTS leads (
+            id SERIAL PRIMARY KEY,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            contact_id INTEGER REFERENCES customer_contact(contact_id) ON DELETE SET NULL,
+            name VARCHAR(150) NOT NULL,
+            email VARCHAR(120),
+            phone VARCHAR(20),
+            source VARCHAR(80),
+            stage VARCHAR(50) DEFAULT 'new',
+            value INTEGER DEFAULT 0,
+            notes TEXT,
+            assigned_to INTEGER REFERENCES users(id),
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS customer_notes (
+            id SERIAL PRIMARY KEY,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            contact_id INTEGER NOT NULL
+                REFERENCES customer_contact(contact_id) ON DELETE CASCADE,
+            author_id INTEGER NOT NULL REFERENCES users(id),
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS follow_ups (
+            id SERIAL PRIMARY KEY,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE,
+            contact_id INTEGER REFERENCES customer_contact(contact_id) ON DELETE SET NULL,
+            assigned_to INTEGER NOT NULL REFERENCES users(id),
+            title VARCHAR(200) NOT NULL,
+            due_date DATE NOT NULL,
+            is_done BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS product_categories (
+            id SERIAL PRIMARY KEY,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            name VARCHAR(100) NOT NULL,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        ALTER TABLE product_inventory
+        ADD COLUMN IF NOT EXISTS category_id INTEGER
+        REFERENCES product_categories(id) ON DELETE SET NULL
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS suppliers (
+            id SERIAL PRIMARY KEY,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            name VARCHAR(150) NOT NULL,
+            email VARCHAR(120),
+            phone VARCHAR(20),
+            address TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS purchase_orders (
+            id SERIAL PRIMARY KEY,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            supplier_id INTEGER REFERENCES suppliers(id) ON DELETE SET NULL,
+            created_by INTEGER NOT NULL REFERENCES users(id),
+            status VARCHAR(30) DEFAULT 'pending',
+            order_date DATE NOT NULL,
+            expected_date DATE,
+            received_date DATE,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS purchase_order_items (
+            id SERIAL PRIMARY KEY,
+            purchase_order_id INTEGER NOT NULL
+                REFERENCES purchase_orders(id) ON DELETE CASCADE,
+            product_id INTEGER REFERENCES product_inventory(id) ON DELETE SET NULL,
+            product_name VARCHAR(150) NOT NULL,
+            quantity_ordered INTEGER NOT NULL,
+            quantity_received INTEGER DEFAULT 0,
+            unit_cost NUMERIC(12,2) NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS notifications (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            business_id INTEGER REFERENCES businesses(id) ON DELETE CASCADE,
+            type VARCHAR(60) NOT NULL,
+            title VARCHAR(200) NOT NULL,
+            body TEXT,
+            is_read BOOLEAN DEFAULT FALSE,
+            entity_type VARCHAR(60),
+            entity_id INTEGER,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            business_id INTEGER REFERENCES businesses(id) ON DELETE SET NULL,
+            action VARCHAR(100) NOT NULL,
+            entity_type VARCHAR(60),
+            entity_id INTEGER,
+            detail JSONB,
+            ip_address VARCHAR(45),
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS loyalty_accounts (
+            id SERIAL PRIMARY KEY,
+            contact_id INTEGER NOT NULL UNIQUE
+                REFERENCES customer_contact(contact_id) ON DELETE CASCADE,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            points INTEGER DEFAULT 0,
+            total_earned INTEGER DEFAULT 0,
+            total_redeemed INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS loyalty_transactions (
+            id SERIAL PRIMARY KEY,
+            account_id INTEGER NOT NULL
+                REFERENCES loyalty_accounts(id) ON DELETE CASCADE,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            type VARCHAR(20) NOT NULL,
+            points INTEGER NOT NULL,
+            reference VARCHAR(100),
+            note TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS kpi_targets (
+            id SERIAL PRIMARY KEY,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            year INTEGER NOT NULL,
+            month INTEGER NOT NULL,
+            revenue_target NUMERIC(14,2) DEFAULT 0,
+            sales_target INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
     ]
 
     async with engine.begin() as conn:

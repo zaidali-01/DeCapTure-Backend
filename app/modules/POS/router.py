@@ -60,6 +60,38 @@ async def list_inventory(
     return await get_products(db, business_id)
 
 
+@router.get("/inventory/low-stock")
+async def low_stock_items(
+    threshold: int = Query(5, ge=1),
+    business_id: Optional[int] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    business_id = await resolve_business_id(current_user, db, business_id)
+    from sqlalchemy import select
+    from app.models.inventory import ProductInventory
+    result = await db.execute(
+        select(ProductInventory).where(
+            ProductInventory.business_id == business_id,
+            ProductInventory.quantity <= threshold
+        ).order_by(ProductInventory.quantity.asc())
+    )
+    items = result.scalars().all()
+    return {
+        "threshold": threshold,
+        "count": len(items),
+        "items": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "quantity": p.quantity,
+                "price": float(p.price or 0),
+            }
+            for p in items
+        ]
+    }
+
+
 @router.get("/inventory/{product_id}", response_model=ProductResponse)
 async def get_product(
     product_id: int,
@@ -106,6 +138,7 @@ async def delete_inventory(
 async def create_new_sale(
     data: SaleCreate,
     business_id: Optional[int] = Query(None),
+    contact_id: Optional[int] = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -114,7 +147,7 @@ async def create_new_sale(
     if not await has_role(db, current_user.id, business_id, ["business_owner", "manager", "cashier"]):
         raise HTTPException(403, "Not allowed")
 
-    return await create_sale(db, current_user.id, business_id, data)
+    return await create_sale(db, current_user.id, business_id, data, contact_id)
 
 
 @router.get("/sales", response_model=List[Dict])

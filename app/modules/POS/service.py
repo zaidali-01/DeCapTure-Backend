@@ -66,10 +66,28 @@ async def delete_product(db: AsyncSession, product_id: int, business_id: int):
 
     await db.execute(delete(ProductInventory).where(ProductInventory.id == product_id))
     await db.commit()
+
+    from app.modules.Audit.service import log as audit_log
+
+    await audit_log(
+        db,
+        action="delete_product",
+        entity_type="product",
+        entity_id=product_id,
+        business_id=business_id,
+        detail={"product_name": product.name},
+    )
+
     return {"message": "Product deleted successfully"}
 
 
-async def create_sale(db: AsyncSession, user_id: int, business_id: int, data):
+async def create_sale(
+    db: AsyncSession,
+    user_id: int,
+    business_id: int,
+    data,
+    contact_id: int = None,
+):
     sale = Sales(
         user_id=user_id,
         business_id=business_id,
@@ -82,6 +100,7 @@ async def create_sale(db: AsyncSession, user_id: int, business_id: int, data):
     await db.refresh(sale)
 
     total_amount = 0
+    low_stock_products = []
 
     for item in data.items:
         product = await get_product_by_id(db, item.listing_id, business_id)
@@ -93,6 +112,21 @@ async def create_sale(db: AsyncSession, user_id: int, business_id: int, data):
         total_amount += float(product.price) * item.quantity
         db.add(product)
 
+        LOW_STOCK_THRESHOLD = 5
+        if product.quantity <= LOW_STOCK_THRESHOLD:
+            print(
+                f"[LOW STOCK ALERT] Product '{product.name}' (ID: {product.id}) "
+                f"has only {product.quantity} units left for business {business_id}."
+            )
+            # This print serves as a hook for a future notification service.
+            low_stock_products.append(
+                {
+                    "id": product.id,
+                    "name": product.name,
+                    "quantity": product.quantity,
+                }
+            )
+
         db.add(SalesInventoryBridge(
             sales_id=sale.id,
             listing_id=item.listing_id,
@@ -100,6 +134,21 @@ async def create_sale(db: AsyncSession, user_id: int, business_id: int, data):
         ))
 
     await db.commit()
+
+    if low_stock_products:
+        from app.modules.Notifications.service import create_notification
+
+        for product_info in low_stock_products:
+            await create_notification(
+                db=db,
+                user_id=user_id,
+                type="low_stock",
+                title=f"Low stock: {product_info['name']}",
+                body=f"Only {product_info['quantity']} units remaining.",
+                business_id=business_id,
+                entity_type="product",
+                entity_id=product_info["id"],
+            )
 
     today = date.today()
     result = await db.execute(
@@ -111,8 +160,8 @@ async def create_sale(db: AsyncSession, user_id: int, business_id: int, data):
     daily = result.scalar_one_or_none()
 
     if daily:
-        daily.revenue += total_amount
-        daily.sales += 1
+        daily.revenue = float(daily.revenue or 0) + total_amount
+        daily.sales = int(daily.sales or 0) + 1
         db.add(daily)
     else:
         db.add(DailyAccounts(
@@ -128,6 +177,30 @@ async def create_sale(db: AsyncSession, user_id: int, business_id: int, data):
 
     await db.commit()
     await db.refresh(sale)
+
+    if contact_id:
+        from app.modules.Loyalty.service import award_points
+
+        await award_points(
+            db,
+            contact_id=contact_id,
+            business_id=business_id,
+            amount_spent=total_amount,
+            reference=str(sale.id),
+        )
+
+    from app.modules.Audit.service import log as audit_log
+
+    await audit_log(
+        db,
+        action="create_sale",
+        user_id=user_id,
+        business_id=business_id,
+        entity_type="sale",
+        entity_id=sale.id,
+        detail={"total_amount": total_amount, "items_count": len(data.items)},
+    )
+
     return sale
 
 
