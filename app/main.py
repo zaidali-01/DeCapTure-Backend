@@ -25,6 +25,19 @@ async def apply_startup_schema_fixes() -> None:
         ALTER TABLE IF EXISTS communication_messages
         ADD COLUMN IF NOT EXISTS sources JSON
         """,
+        """
+        CREATE TABLE IF NOT EXISTS escalation_requests (
+            id SERIAL PRIMARY KEY,
+            session_id INTEGER NOT NULL
+                REFERENCES communication_sessions(id) ON DELETE CASCADE,
+            business_id INTEGER NOT NULL
+                REFERENCES businesses(id) ON DELETE CASCADE,
+            status VARCHAR(20) DEFAULT 'pending',
+            requested_at TIMESTAMP DEFAULT NOW(),
+            agent_user_id INTEGER REFERENCES users(id),
+            resolved_at TIMESTAMP
+        )
+        """,
     ]
 
     async with engine.begin() as conn:

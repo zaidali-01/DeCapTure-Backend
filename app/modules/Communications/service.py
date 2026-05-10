@@ -218,3 +218,178 @@ async def ask(
     await db.commit()
     await db.refresh(assistant_msg)
     return assistant_msg
+
+
+import httpx as _httpx
+from datetime import datetime as _dt
+from app.models.communications import EscalationRequest
+
+
+def _publish_to_supabase(channel: str, payload: dict) -> None:
+    """
+    Fire-and-forget broadcast to Supabase Realtime REST API.
+    Never raises - failures are silently logged so message saving is never blocked.
+    Channel naming: "session-{session_id}" (hyphens, not underscores).
+    """
+    try:
+        url = f"{settings.SUPABASE_URL}/realtime/v1/api/broadcast"
+        headers = {
+            "Content-Type": "application/json",
+            "apikey": settings.SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}",
+        }
+        body = {
+            "messages": [
+                {
+                    "topic": channel,
+                    "event": "new_message",
+                    "payload": payload,
+                }
+            ]
+        }
+        _httpx.post(url, json=body, headers=headers, timeout=5)
+    except Exception as exc:
+        print(f"[Supabase broadcast error] {exc}")
+
+
+async def request_escalation(
+    db: AsyncSession,
+    session_id: int,
+) -> EscalationRequest:
+    session = await db.get(CommunicationSession, session_id)
+    if not session:
+        raise ValueError("Session not found")
+
+    escalation = EscalationRequest(
+        session_id=session_id,
+        business_id=session.business_id,
+        status="pending",
+    )
+    db.add(escalation)
+    await db.commit()
+
+    db.add(CommunicationMessage(
+        session_id=session_id,
+        role="system",
+        content="Customer has requested a human agent. Please wait.",
+    ))
+    await db.commit()
+    await db.refresh(escalation)
+    return escalation
+
+
+async def get_pending_escalations(
+    db: AsyncSession,
+    business_id: int,
+) -> list:
+    result = await db.execute(
+        select(EscalationRequest).where(
+            EscalationRequest.business_id == business_id,
+            EscalationRequest.status.in_(["pending", "active"]),
+        )
+    )
+    return result.scalars().all()
+
+
+async def claim_escalation(
+    db: AsyncSession,
+    escalation_id: int,
+    agent_user_id: int,
+) -> EscalationRequest:
+    escalation = await db.get(EscalationRequest, escalation_id)
+    if not escalation:
+        raise ValueError("Escalation not found")
+
+    escalation.status = "active"
+    escalation.agent_user_id = agent_user_id
+    db.add(escalation)
+
+    db.add(CommunicationMessage(
+        session_id=escalation.session_id,
+        role="system",
+        content="A human agent has joined the chat.",
+    ))
+    await db.commit()
+    await db.refresh(escalation)
+
+    _publish_to_supabase(
+        channel=f"session-{escalation.session_id}",
+        payload={
+            "role": "system",
+            "content": "A human agent has joined the chat.",
+            "session_id": escalation.session_id,
+        },
+    )
+    return escalation
+
+
+async def send_human_message(
+    db: AsyncSession,
+    session_id: int,
+    content: str,
+    role: str,
+) -> CommunicationMessage:
+    msg = CommunicationMessage(
+        session_id=session_id,
+        role=role,
+        content=content,
+    )
+    db.add(msg)
+    await db.commit()
+    await db.refresh(msg)
+
+    _publish_to_supabase(
+        channel=f"session-{session_id}",
+        payload={
+            "role": role,
+            "content": content,
+            "session_id": session_id,
+            "created_at": msg.created_at.isoformat() if msg.created_at else None,
+        },
+    )
+    return msg
+
+
+async def close_escalation(
+    db: AsyncSession,
+    escalation_id: int,
+    agent_user_id: int,
+) -> EscalationRequest:
+    escalation = await db.get(EscalationRequest, escalation_id)
+    if not escalation:
+        raise ValueError("Escalation not found")
+
+    escalation.status = "closed"
+    escalation.resolved_at = _dt.utcnow()
+    db.add(escalation)
+
+    db.add(CommunicationMessage(
+        session_id=escalation.session_id,
+        role="system",
+        content="The agent has closed this session. Thank you.",
+    ))
+    await db.commit()
+    await db.refresh(escalation)
+
+    _publish_to_supabase(
+        channel=f"session-{escalation.session_id}",
+        payload={
+            "role": "system",
+            "content": "The agent has closed this session. Thank you.",
+            "session_id": escalation.session_id,
+        },
+    )
+    return escalation
+
+
+async def get_escalation_by_session(
+    db: AsyncSession,
+    session_id: int,
+) -> EscalationRequest | None:
+    result = await db.execute(
+        select(EscalationRequest).where(
+            EscalationRequest.session_id == session_id,
+            EscalationRequest.status.in_(["pending", "active"]),
+        )
+    )
+    return result.scalar_one_or_none()

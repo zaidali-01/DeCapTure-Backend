@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Customer Chat | DeCapTure</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 :root{
   --bg:#f5f1e8;
@@ -181,6 +182,11 @@ input:focus,textarea:focus{
   background:var(--brand-soft);
   border-color:#f3d1c2;
 }
+.message.agent {
+  align-self: flex-start;
+  background: #f0f4ff;
+  border-color: #c7d4f5;
+}
 .message.system{
   align-self:center;
   max-width:100%;
@@ -231,6 +237,20 @@ input:focus,textarea:focus{
 }
 .typing span:nth-child(2){animation-delay:.15s}
 .typing span:nth-child(3){animation-delay:.3s}
+.escalate-btn {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--brand-dark);
+  cursor: pointer;
+  transition: background .18s;
+}
+.escalate-btn:hover { background: #f8f3ea; }
+.escalate-btn:disabled { opacity: .45; cursor: default; }
 @keyframes bounce{
   0%, 80%, 100%{transform:translateY(0)}
   40%{transform:translateY(-5px)}
@@ -297,9 +317,14 @@ input:focus,textarea:focus{
   </div>
 
 <script>
+const SUPABASE_URL = "https://your-project.supabase.co";   // replace with your value
+const SUPABASE_ANON_KEY = "your-supabase-anon-key";         // replace with your value
 const API = window.location.origin;
 let sessionId = null;
 let customerName = "";
+let isEscalated = false;
+let supabaseClient = null;
+let supabaseChannel = null;
 
 function setStatus(id, message, tone = "") {
   const el = document.getElementById(id);
@@ -356,6 +381,14 @@ function addMessage(role, content, sources = []) {
 
   article.innerHTML = body;
   messages.appendChild(article);
+  if (role === "bot" && !isEscalated) {
+    const btn = document.createElement("button");
+    btn.className = "escalate-btn";
+    btn.id = "escalateBtn";
+    btn.textContent = "Not helpful? Request a human agent";
+    btn.onclick = requestEscalation;
+    messages.appendChild(btn);
+  }
   messages.scrollTop = messages.scrollHeight;
 }
 
@@ -364,6 +397,54 @@ function setChatHeader() {
   document.getElementById("chatSubtitle").textContent = customerName ? `Chatting as ${customerName}` : "Chat session active";
   document.getElementById("sessionBadge").textContent = `Live #${sessionId}`;
   document.getElementById("sendButton").disabled = false;
+  initSupabaseRealtime(sessionId);
+}
+
+function initSupabaseRealtime(sessionId) {
+  if (!window.supabase || !SUPABASE_URL || SUPABASE_URL.includes("your-project")) {
+    return;
+  }
+  if (supabaseChannel) {
+    supabaseClient.removeChannel(supabaseChannel);
+  }
+  supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  supabaseChannel = supabaseClient
+    .channel(`session-${sessionId}`)
+    .on("broadcast", { event: "new_message" }, ({ payload }) => {
+      if (payload.role === "agent") {
+        // Render agent messages as bot-style but labelled "Agent"
+        const messages = document.getElementById("messages");
+        const article = document.createElement("article");
+        article.className = "message agent";
+        article.innerHTML = `<div><strong style="font-size:11px;text-transform:uppercase;
+          letter-spacing:.06em;color:#3b5bdb">Agent</strong><br/>
+          ${escapeHtml(payload.content).replace(/\n/g, "<br/>")}</div>`;
+        messages.appendChild(article);
+        messages.scrollTop = messages.scrollHeight;
+      } else if (payload.role === "system") {
+        addMessage("system", payload.content);
+      }
+    })
+    .subscribe();
+}
+
+async function requestEscalation() {
+  if (!sessionId || isEscalated) return;
+  const btn = document.getElementById("escalateBtn");
+  if (btn) btn.disabled = true;
+  try {
+    await api("/communications/escalate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    isEscalated = true;
+    addMessage("system", "You've been added to the human agent queue. Please wait - an agent will join shortly.");
+    document.querySelectorAll(".escalate-btn").forEach(b => b.disabled = true);
+  } catch (err) {
+    if (btn) btn.disabled = false;
+    setStatus("chatStatus", err.message, "err");
+  }
 }
 
 async function createSession() {
@@ -420,6 +501,12 @@ async function joinSession() {
       });
     }
 
+    const escStatus = await api(`/communications/escalations/session/${value}`);
+    if (escStatus.status !== "none") {
+      isEscalated = true;
+      document.querySelectorAll(".escalate-btn").forEach(b => b.disabled = true);
+    }
+
     setStatus("setupStatus", `Joined session ${sessionId}.`, "ok");
   } catch (error) {
     setStatus("setupStatus", error.message, "err");
@@ -458,6 +545,27 @@ async function sendMessage() {
 
   addMessage("user", content);
   box.value = "";
+  if (isEscalated) {
+    try {
+      await api("/communications/human-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          content: content,
+          role: "user",
+        }),
+      });
+      setStatus("chatStatus", "Message sent.", "ok");
+    } catch (err) {
+      addMessage("system", `Error: ${err.message}`);
+      setStatus("chatStatus", err.message, "err");
+    } finally {
+      document.getElementById("sendButton").disabled = false;
+      box.focus();
+    }
+    return;
+  }
   setStatus("chatStatus", "Waiting for assistant reply...", "warn");
   document.getElementById("sendButton").disabled = true;
   showTyping();

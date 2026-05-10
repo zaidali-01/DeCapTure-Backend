@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Owner Workspace | DeCapTure</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 :root{
   --bg:#f3efe4;
@@ -236,6 +237,41 @@ input:focus,textarea:focus,select:focus{
   color:var(--muted);
   background:rgba(255,255,255,.5);
 }
+.agent-chat {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 18px;
+  background: #f8fffe;
+}
+.agent-messages {
+  max-height: 340px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.agent-msg {
+  padding: 11px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  font-size: 14px;
+  line-height: 1.6;
+  background: #fff;
+}
+.agent-msg.user  { background: #edf9f7; border-color: #cfe7e3; align-self: flex-end; }
+.agent-msg.agent { background: #f0f4ff; border-color: #c7d4f5; }
+.agent-msg.system { background: transparent; border-style: dashed;
+                    color: var(--muted); text-align: center; font-size: 13px; }
+.escalation-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  background: #fff;
+  margin-bottom: 10px;
+}
+.escalation-card h4 { margin: 0 0 6px; font-size: 16px; }
 @media (max-width: 920px){
   .grid{grid-template-columns:1fr}
   .detail-grid{grid-template-columns:1fr}
@@ -244,6 +280,23 @@ input:focus,textarea:focus,select:focus{
 </style>
 </head>
 <body>
+  <div id="loginOverlay" style="
+    display:none; position:fixed; inset:0; background:rgba(243,239,228,.96);
+    backdrop-filter:blur(8px); z-index:999;
+    align-items:center; justify-content:center;
+  ">
+    <div class="panel" style="max-width:400px;width:100%">
+      <h2>Owner Login</h2>
+      <p class="lead">Sign in to manage escalations and your business.</p>
+      <label for="loginEmail">Email</label>
+      <input id="loginEmail" type="email" placeholder="owner@business.com" />
+      <label for="loginPassword">Password</label>
+      <input id="loginPassword" type="password" placeholder="Password" />
+      <button class="btn" type="button" style="margin-top:14px" onclick="doLogin()">Sign in</button>
+      <div id="loginStatus" class="status"></div>
+    </div>
+  </div>
+
   <div class="shell">
     <section class="hero">
       <span class="eyebrow">DeCapTure owner workspace</span>
@@ -323,6 +376,13 @@ input:focus,textarea:focus,select:focus{
           </section>
 
           <section class="subpanel" style="margin-top:18px">
+            <h3>Live escalations</h3>
+            <p>Customers who requested a human agent. Claim a session to join the live chat.</p>
+            <button class="btn secondary" type="button" onclick="loadEscalations()">Refresh escalations</button>
+            <div id="escalationsList" style="margin-top:14px"></div>
+          </section>
+
+          <section class="subpanel" style="margin-top:18px">
             <h3>Registered API routes</h3>
             <p>This is a quick way to check whether your backend routes are actually mounted and available.</p>
             <pre id="routesBox" style="margin:0;white-space:pre-wrap;font-family:'Courier New', monospace;font-size:13px;color:#3b4a4d;background:#f8f5ee;border:1px solid var(--line);border-radius:16px;padding:14px;max-height:260px;overflow:auto"></pre>
@@ -333,10 +393,14 @@ input:focus,textarea:focus,select:focus{
   </div>
 
 <script>
+const SUPABASE_URL = "https://your-project.supabase.co";   // replace
+const SUPABASE_ANON_KEY = "your-supabase-anon-key";         // replace
 const API = window.location.origin;
 let businesses = [];
 let selectedBusinessId = null;
 let currentDocuments = [];
+let authToken = localStorage.getItem("decapture_token") || null;
+let agentSupabaseClients = {};  // keyed by session_id
 
 function setStatus(id, message, tone = "") {
   const el = document.getElementById(id);
@@ -354,6 +418,10 @@ function escapeHtml(value) {
 }
 
 async function api(path, options = {}) {
+  options.headers = options.headers || {};
+  if (authToken) {
+    options.headers["Authorization"] = `Bearer ${authToken}`;
+  }
   const response = await fetch(`${API}${path}`, options);
   const text = await response.text();
   let data = null;
@@ -370,6 +438,35 @@ async function api(path, options = {}) {
   }
 
   return data;
+}
+
+function checkLogin() {
+  authToken = localStorage.getItem("decapture_token");
+  if (!authToken) {
+    document.getElementById("loginOverlay").style.display = "flex";
+  } else {
+    document.getElementById("loginOverlay").style.display = "none";
+  }
+}
+
+async function doLogin() {
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value.trim();
+  setStatus("loginStatus", "Signing in...", "warn");
+  try {
+    const data = await api("/users/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    authToken = data.access_token;
+    localStorage.setItem("decapture_token", authToken);
+    document.getElementById("loginOverlay").style.display = "none";
+    loadBusinesses();
+    checkHealth();
+  } catch (err) {
+    setStatus("loginStatus", err.message, "err");
+  }
 }
 
 function renderBusinesses() {
@@ -408,6 +505,7 @@ function selectBusiness(id) {
   document.getElementById("uploadStatus").textContent = "";
   document.getElementById("documentsStatus").textContent = "";
   loadDocuments();
+  loadEscalations();
   showRoutes();
 }
 
@@ -608,8 +706,164 @@ async function showRoutes() {
   }
 }
 
-loadBusinesses();
-checkHealth();
+async function loadEscalations() {
+  if (!selectedBusinessId) return;
+  const container = document.getElementById("escalationsList");
+  container.innerHTML = `<div class="status warn">Loading escalations...</div>`;
+  try {
+    const escalations = await api(`/communications/escalations/${selectedBusinessId}`);
+    if (!escalations.length) {
+      container.innerHTML = `<div class="empty">No active escalations right now.</div>`;
+      return;
+    }
+    container.innerHTML = escalations.map(esc => `
+      <div class="escalation-card" id="esc-card-${esc.id}">
+        <h4>Session #${esc.session_id} - ${esc.status.toUpperCase()}</h4>
+        <div class="meta">
+          Escalation ID: ${esc.id}<br/>
+          Requested: ${new Date(esc.requested_at).toLocaleString()}<br/>
+          ${esc.agent_user_id ? `Agent ID: ${esc.agent_user_id}` : "Unclaimed"}
+        </div>
+        ${esc.status === "pending"
+          ? `<button class="btn" style="margin-top:10px"
+               onclick="claimEscalation(${esc.id}, ${esc.session_id})">
+               Claim &amp; Chat
+             </button>`
+          : esc.status === "active"
+            ? `<button class="btn secondary" style="margin-top:10px"
+                 onclick="openAgentChat(${esc.id}, ${esc.session_id})">
+                 Rejoin Chat
+               </button>`
+            : ""
+        }
+        <div id="agent-chat-${esc.session_id}"></div>
+      </div>
+    `).join("");
+  } catch (err) {
+    container.innerHTML = `<div class="status err">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function claimEscalation(escalationId, sessionId) {
+  try {
+    await api(`/communications/escalations/${escalationId}/claim`, { method: "POST" });
+    await openAgentChat(escalationId, sessionId);
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function openAgentChat(escalationId, sessionId) {
+  const container = document.getElementById(`agent-chat-${sessionId}`);
+  if (!container) return;
+
+  // Load history
+  let history = [];
+  try {
+    history = await api(`/communications/sessions/${sessionId}/history`);
+  } catch (_) {}
+
+  const historyHtml = history.map(msg => {
+    const cls = msg.role === "user" ? "user"
+               : msg.role === "agent" ? "agent"
+               : "system";
+    const label = msg.role === "agent"
+      ? `<strong style="font-size:11px;text-transform:uppercase;color:#3b5bdb">Agent</strong><br/>`
+      : "";
+    return `<div class="agent-msg ${cls}">${label}${escapeHtml(msg.content)}</div>`;
+  }).join("");
+
+  container.innerHTML = `
+    <div class="agent-chat">
+      <div class="agent-messages" id="agent-msgs-${sessionId}">${historyHtml}</div>
+      <div style="display:flex;gap:10px;align-items:flex-end">
+        <textarea id="agent-input-${sessionId}"
+          style="flex:1;border-radius:16px;border:1px solid var(--line);
+                 padding:12px 14px;font:inherit;resize:vertical;min-height:60px"
+          placeholder="Type your reply as agent..."
+          onkeydown="handleAgentKey(event, ${escalationId}, ${sessionId})"></textarea>
+        <button class="btn" onclick="sendAgentMessage(${escalationId}, ${sessionId})">Send</button>
+      </div>
+      <button class="btn danger" style="margin-top:10px;font-size:13px"
+        onclick="closeEscalation(${escalationId}, ${sessionId})">
+        Close session
+      </button>
+      <div id="agent-status-${sessionId}" class="status"></div>
+    </div>
+  `;
+
+  // Scroll history to bottom
+  const msgs = document.getElementById(`agent-msgs-${sessionId}`);
+  if (msgs) msgs.scrollTop = msgs.scrollHeight;
+
+  // Subscribe to Supabase Realtime for incoming customer messages
+  if (!agentSupabaseClients[sessionId] && window.supabase && !SUPABASE_URL.includes("your-project")) {
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    agentSupabaseClients[sessionId] = client;
+    client
+      .channel(`session-${sessionId}`)
+      .on("broadcast", { event: "new_message" }, ({ payload }) => {
+        const msgsDiv = document.getElementById(`agent-msgs-${sessionId}`);
+        if (!msgsDiv) return;
+        const div = document.createElement("div");
+        const cls = payload.role === "user" ? "user"
+                  : payload.role === "agent" ? "agent"
+                  : "system";
+        const label = payload.role === "agent"
+          ? `<strong style="font-size:11px;text-transform:uppercase;color:#3b5bdb">Agent</strong><br/>`
+          : "";
+        div.className = `agent-msg ${cls}`;
+        div.innerHTML = `${label}${escapeHtml(payload.content)}`;
+        msgsDiv.appendChild(div);
+        msgsDiv.scrollTop = msgsDiv.scrollHeight;
+      })
+      .subscribe();
+  }
+}
+
+async function sendAgentMessage(escalationId, sessionId) {
+  const input = document.getElementById(`agent-input-${sessionId}`);
+  const content = input.value.trim();
+  if (!content) return;
+  input.value = "";
+  setStatus(`agent-status-${sessionId}`, "Sending...", "warn");
+  try {
+    await api("/communications/human-message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, content, role: "agent" }),
+    });
+    setStatus(`agent-status-${sessionId}`, "Sent.", "ok");
+  } catch (err) {
+    setStatus(`agent-status-${sessionId}`, err.message, "err");
+  }
+}
+
+function handleAgentKey(event, escalationId, sessionId) {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    sendAgentMessage(escalationId, sessionId);
+  }
+}
+
+async function closeEscalation(escalationId, sessionId) {
+  if (!confirm("Close this session?")) return;
+  try {
+    await api(`/communications/escalations/${escalationId}/close`, { method: "POST" });
+    const container = document.getElementById(`agent-chat-${sessionId}`);
+    if (container) container.innerHTML =
+      `<div class="status ok" style="margin-top:10px">Session closed.</div>`;
+    await loadEscalations();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+checkLogin();
+if (authToken) {
+  loadBusinesses();
+  checkHealth();
+}
 </script>
 </body>
 </html>
