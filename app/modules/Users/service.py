@@ -10,6 +10,7 @@ from app.core.security import hash_password, verify_password, decode_access_toke
 from app.core.database import get_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/users/login", auto_error=False)
 
 
 async def create_user(db: AsyncSession, user: UserCreate):
@@ -58,6 +59,22 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         raise HTTPException(status_code=404, detail="User not found")
 
     return user
+
+
+async def get_current_user_optional(
+    token: str | None = Depends(oauth2_scheme_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    if not token:
+        return None
+
+    payload = decode_access_token(token)
+    if payload is None:
+        return None
+
+    user_id = payload.get("user_id")
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
 
 
 async def get_users(db: AsyncSession):

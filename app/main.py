@@ -4,14 +4,17 @@ from pathlib import Path
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.api import api_router
+from app.core.config import settings
 from app.core.database import Base, engine
 from app.models import *  # noqa: F401,F403
 
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+UPLOADS_DIR = Path(__file__).resolve().parent.parent / "uploads"
 
 
 async def apply_startup_schema_fixes() -> None:
@@ -235,6 +238,96 @@ async def apply_startup_schema_fixes() -> None:
             created_at TIMESTAMP DEFAULT NOW()
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS business_chatbots (
+            id SERIAL PRIMARY KEY,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            name VARCHAR(150) NOT NULL,
+            system_prompt TEXT,
+            is_store_bot BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP
+        )
+        """,
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_business_store_bot
+        ON business_chatbots (business_id)
+        WHERE is_store_bot = TRUE
+        """,
+        """
+        ALTER TABLE IF EXISTS business_documents
+        ADD COLUMN IF NOT EXISTS chatbot_id INTEGER
+        REFERENCES business_chatbots(id) ON DELETE CASCADE
+        """,
+        """
+        ALTER TABLE IF EXISTS communication_sessions
+        ADD COLUMN IF NOT EXISTS chatbot_id INTEGER
+        REFERENCES business_chatbots(id) ON DELETE SET NULL
+        """,
+        """
+        ALTER TABLE IF EXISTS communication_sessions
+        ADD COLUMN IF NOT EXISTS customer_user_id INTEGER
+        REFERENCES users(id) ON DELETE SET NULL
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS store_listings (
+            id SERIAL PRIMARY KEY,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            product_id INTEGER NOT NULL REFERENCES product_inventory(id) ON DELETE CASCADE,
+            is_published BOOLEAN DEFAULT FALSE,
+            listing_type VARCHAR(20) DEFAULT 'product',
+            headline VARCHAR(180),
+            display_description TEXT,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP
+        )
+        """,
+        """
+        ALTER TABLE IF EXISTS store_listings
+        ADD COLUMN IF NOT EXISTS listing_type VARCHAR(20) DEFAULT 'product'
+        """,
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_store_listing_product
+        ON store_listings (business_id, product_id)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS store_listing_images (
+            id SERIAL PRIMARY KEY,
+            listing_id INTEGER NOT NULL REFERENCES store_listings(id) ON DELETE CASCADE,
+            file_path TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS store_orders (
+            id SERIAL PRIMARY KEY,
+            business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            buyer_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            fulfilled_sale_id INTEGER REFERENCES sales(id) ON DELETE SET NULL,
+            buyer_name VARCHAR(150) NOT NULL,
+            buyer_phone VARCHAR(30) NOT NULL,
+            buyer_email VARCHAR(150) NOT NULL,
+            status VARCHAR(30) DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP
+        )
+        """,
+        """
+        ALTER TABLE IF EXISTS store_orders
+        ADD COLUMN IF NOT EXISTS fulfilled_sale_id INTEGER
+        REFERENCES sales(id) ON DELETE SET NULL
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS store_order_items (
+            id SERIAL PRIMARY KEY,
+            order_id INTEGER NOT NULL REFERENCES store_orders(id) ON DELETE CASCADE,
+            product_id INTEGER REFERENCES product_inventory(id) ON DELETE SET NULL,
+            product_name_snapshot VARCHAR(150) NOT NULL,
+            unit_price_snapshot NUMERIC(12,2) NOT NULL,
+            quantity INTEGER NOT NULL
+        )
+        """,
     ]
 
     async with engine.begin() as conn:
@@ -250,16 +343,29 @@ async def lifespan(app: FastAPI):
     yield
 
 
-allowed_origins = [
+default_allowed_origins = [
     "http://localhost:3000",
     "http://localhost:3001",
+    "https://randomly-loyal-blowfish.ngrok-free.app",
 ]
 
+env_allowed_origins = [
+    origin.strip().rstrip("/")
+    for origin in settings.CORS_ORIGINS.split(",")
+    if origin.strip()
+]
+
+allowed_origins = env_allowed_origins or default_allowed_origins
+allowed_origin_regex = settings.CORS_ORIGIN_REGEX or r"^https://[a-z0-9-]+\.ngrok-free\.app$"
+
 app = FastAPI(title="DeCapTure API", version="1.0.0", lifespan=lifespan)
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=allowed_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

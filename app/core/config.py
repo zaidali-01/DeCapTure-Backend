@@ -18,6 +18,8 @@ class Settings:
     JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    CORS_ORIGINS: str = ""
+    CORS_ORIGIN_REGEX: str = ""
     
     class Config:
         env_file = ".env"
@@ -35,6 +37,8 @@ def get_settings() -> Settings:
         JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY", ""),
         JWT_ALGORITHM=os.getenv("JWT_ALGORITHM", "HS256"),
         ACCESS_TOKEN_EXPIRE_MINUTES=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60")),
+        CORS_ORIGINS=os.getenv("CORS_ORIGINS", ""),
+        CORS_ORIGIN_REGEX=os.getenv("CORS_ORIGIN_REGEX", ""),
     )
 
 

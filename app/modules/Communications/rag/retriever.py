@@ -5,6 +5,7 @@ from app.modules.Communications.rag.embedder import embed_text
 
 def retrieve_relevant_chunks(
     business_id: int,
+    chatbot_id: int,
     question: str,
     top_k: int = 5,
 ) -> List[Tuple[str, float]]:
@@ -25,10 +26,11 @@ def retrieve_relevant_chunks(
         query_embeddings=[question_vector],
         n_results=min(top_k, collection.count()),
         include=["documents", "distances"],
+        where={"chatbot_id": chatbot_id},
     )
 
-    chunks = results["documents"][0]
-    distances = results["distances"][0]
+    chunks = results["documents"][0] if results["documents"] else []
+    distances = results["distances"][0] if results["distances"] else []
 
     # Chroma cosine distance = 1 - similarity, so convert back
     scored = [(text, round(1 - dist, 4)) for text, dist in zip(chunks, distances)]

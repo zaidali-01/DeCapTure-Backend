@@ -12,6 +12,7 @@ from app.modules.Marketing.router import router as marketing_router
 from app.modules.Notifications.router import router as notifications_router
 from app.modules.POS.router import router as pos_router
 from app.modules.Suppliers.router import router as suppliers_router
+from app.modules.Store.router import router as store_router
 from app.modules.Users.router import router as users_router
 
 api_router = APIRouter()
@@ -29,3 +30,4 @@ api_router.include_router(suppliers_router)
 api_router.include_router(notifications_router)
 api_router.include_router(audit_router)
 api_router.include_router(loyalty_router)
+api_router.include_router(store_router)

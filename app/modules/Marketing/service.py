@@ -41,7 +41,7 @@ async def generate_marketing_message(
             base = f"{base} {prompt}"
         return base
 
-    url = "https://api.groq.com/v1/llm"  # Example Groq endpoint
+    url = "https://api.groq.com/openai/v1/chat/completions"  # Example Groq endpoint
     headers = {"Authorization": f"Bearer {settings.GROQ_API_KEY}"}
     base_prompt = (
         f"Generate a short, persuasive {channel} marketing message for the business "
@@ -130,20 +130,20 @@ async def send_marketing_message(
                 current_message = ai_message_cache
             if not current_message:
                 raise HTTPException(status_code=400, detail="Unable to prepare campaign message")
-            print(channel, contact.email, contact.phone, current_message,"Credentials:", credentials.smtp_token)
+            # print(channel, contact.email, contact.phone, current_message,"Credentials:", credentials.smtp_token)
             if channel == "email" and contact.email:
                 msg = EmailMessage()
                 msg["Subject"] = "Marketing Message"
                 msg["From"] = business.email
                 msg["To"] = contact.email
                 msg.set_content(current_message)
-                print(f"Sending email to {contact.email} with message: {current_message}")
+                # print(f"Sending email to {contact.email} with message: {current_message}")
                 with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
-                    print("Starting TLS for SMTP connection")
+                    # print("Starting TLS for SMTP connection")
                     smtp.starttls()
-                    print(f"Logging in to SMTP with token: {credentials.smtp_token}")
+                    # print(f"Logging in to SMTP with token: {credentials.smtp_token}")
                     smtp.login(business.email, credentials.smtp_token)
-                    print("SMTP login successful, sending email...")
+                    # print("SMTP login successful, sending email...")
                     smtp.send_message(msg)
                 status = "sent"
 

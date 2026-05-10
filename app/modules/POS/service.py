@@ -2,10 +2,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 from fastapi import HTTPException
 from datetime import date
+from pathlib import Path
 
 from app.models.inventory import ProductInventory
 from app.models.sales import Sales, SalesInventoryBridge
 from app.models.accounts import DailyAccounts
+from app.models.store import StoreListing, StoreListingImage
+
+
+STORE_UPLOADS_ROOT = Path(__file__).resolve().parents[3] / "uploads"
 
 
 async def create_product(db: AsyncSession, business_id: int, data):
@@ -63,6 +68,26 @@ async def update_product(db: AsyncSession, product_id: int, business_id: int, da
 
 async def delete_product(db: AsyncSession, product_id: int, business_id: int):
     product = await get_product_by_id(db, product_id, business_id)
+
+    listing_result = await db.execute(
+        select(StoreListing).where(
+            StoreListing.product_id == product_id,
+            StoreListing.business_id == business_id,
+        )
+    )
+    listing = listing_result.scalar_one_or_none()
+
+    if listing:
+        image_result = await db.execute(
+            select(StoreListingImage).where(StoreListingImage.listing_id == listing.id)
+        )
+        images = image_result.scalars().all()
+        for image in images:
+            if not image.file_path:
+                continue
+            file_on_disk = STORE_UPLOADS_ROOT.parent / image.file_path.lstrip("/")
+            if file_on_disk.exists():
+                file_on_disk.unlink()
 
     await db.execute(delete(ProductInventory).where(ProductInventory.id == product_id))
     await db.commit()
